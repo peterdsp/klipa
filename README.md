@@ -81,12 +81,6 @@ cargo run --release
 cargo build --release       # → target/release/klipa
 ```
 
-## Status
-
-Functional scaffold. The tray icon ships a 1×1 transparent placeholder —
-drop a real PNG and update `tray::default_icon()` before shipping.
-Wayland users will see no global-hotkey support (security restriction).
-
 ## License
 
 MIT

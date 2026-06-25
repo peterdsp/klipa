@@ -37,11 +37,15 @@ impl Tray {
     }
 }
 
-/// A 1px transparent icon stands in until a real one is bundled.
-/// Replace by loading from a PNG when icons land in `assets/`.
+/// Tray icon. The PNG is embedded into the binary at build time so we
+/// never have to ship a sidecar asset file.
 fn default_icon() -> Icon {
-    let rgba = vec![0u8, 0, 0, 0];
-    Icon::from_rgba(rgba, 1, 1).expect("placeholder icon")
+    const BYTES: &[u8] = include_bytes!("../../../assets/tray.png");
+    let img = image::load_from_memory_with_format(BYTES, image::ImageFormat::Png)
+        .expect("tray.png decode")
+        .to_rgba8();
+    let (w, h) = img.dimensions();
+    Icon::from_rgba(img.into_raw(), w, h).expect("tray icon")
 }
 
 /// Drain pending menu events. Returns the IDs that were activated.
