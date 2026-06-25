@@ -1,0 +1,140 @@
+// klipa — Slint UI markup.
+// Kept in a single file for now; split when it grows past ~300 lines.
+
+import { LineEdit, ListView, Button, ScrollView } from "std-widgets.slint";
+
+struct HistoryRow {
+    id: string,        // UUID as text
+    title: string,
+    pin: string,       // empty when unpinned
+    is_selected: bool,
+}
+
+// Liquid-glass-ish surface: layered translucent gradient. Real backdrop
+// blur requires a shader; this is the tasteful fallback that still feels
+// "premium" without the GPU cost.
+component GlassSurface inherits Rectangle {
+    background: transparent;
+    Rectangle {
+        background: @linear-gradient(180deg,
+            rgba(28, 28, 30, 0.78) 0%,
+            rgba(20, 20, 22, 0.86) 100%);
+        border-radius: 12px;
+        border-width: 0.5px;
+        border-color: rgba(255, 255, 255, 0.08);
+    }
+}
+
+export component KlipaWindow inherits Window {
+    in property <[HistoryRow]> items;
+    in-out property <string> query;
+    in property <int> selected-index;
+
+    callback query-changed(string);
+    callback row-clicked(int);                  // single click: select
+    callback row-activated(int);                // double click / Enter: copy
+    callback row-delete-requested(int);         // delete key on selection
+    callback clear-clicked();
+    callback key-pressed(KeyEvent);
+
+    title: "klipa";
+    width: 420px;
+    height: 520px;
+    background: transparent;
+    no-frame: false;
+
+    GlassSurface { width: 100%; height: 100%; }
+
+    VerticalLayout {
+        padding: 10px;
+        spacing: 6px;
+
+        // ── Search field ──────────────────────────────────────
+        Rectangle {
+            height: 30px;
+            background: rgba(255, 255, 255, 0.06);
+            border-radius: 7px;
+            HorizontalLayout {
+                padding-left: 8px;
+                padding-right: 8px;
+                spacing: 6px;
+                alignment: stretch;
+
+                Text {
+                    text: "⌕";
+                    color: rgba(255, 255, 255, 0.55);
+                    vertical-alignment: center;
+                }
+
+                LineEdit {
+                    placeholder-text: "type to search…";
+                    text <=> root.query;
+                    font-size: 13px;
+                    edited(t) => { root.query-changed(t); }
+                }
+            }
+        }
+
+        // ── List ──────────────────────────────────────────────
+        ListView {
+            for row[i] in root.items: Rectangle {
+                height: 26px;
+                background: row.is-selected
+                    ? rgba(10, 132, 255, 0.85)
+                    : transparent;
+                border-radius: 6px;
+
+                HorizontalLayout {
+                    padding-left: 10px;
+                    padding-right: 10px;
+                    spacing: 6px;
+                    alignment: stretch;
+
+                    Text {
+                        text: row.title;
+                        font-size: 13px;
+                        font-weight: 300;
+                        color: row.is-selected ? white : rgba(255, 255, 255, 0.92);
+                        vertical-alignment: center;
+                        overflow: elide;
+                        horizontal-stretch: 1;
+                    }
+
+                    Text {
+                        text: row.pin == "" ? "" : "⌥" + row.pin;
+                        font-size: 10px;
+                        color: row.is-selected ? rgba(255, 255, 255, 0.85) : rgba(255, 255, 255, 0.55);
+                        vertical-alignment: center;
+                    }
+                }
+
+                TouchArea {
+                    clicked => { root.row-clicked(i); }
+                    double-clicked => { root.row-activated(i); }
+                }
+            }
+        }
+
+        // ── Footer ────────────────────────────────────────────
+        Rectangle {
+            height: 1px;
+            background: rgba(255, 255, 255, 0.08);
+        }
+        HorizontalLayout {
+            alignment: end;
+            spacing: 6px;
+            Button {
+                text: "Clear";
+                clicked => { root.clear-clicked(); }
+            }
+        }
+    }
+
+    forward-focus: focus-scope;
+    focus-scope := FocusScope {
+        key-pressed(event) => {
+            root.key-pressed(event);
+            accept
+        }
+    }
+}
