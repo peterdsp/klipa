@@ -25,6 +25,7 @@ pub struct App {
     window: KlipaWindow,
     history: Arc<HistoryService>,
     model: Rc<VecModel<HistoryRow>>,
+    footer_model: Rc<VecModel<FooterAction>>,
     tokio: TokioHandle,
     ids: Ids,
     /// Shadow of the window's visible state — Slint's `Window` API
@@ -37,11 +38,14 @@ impl App {
     pub fn new(history: Arc<HistoryService>, tokio: TokioHandle) -> Self {
         let window = KlipaWindow::new().expect("slint window");
         let model = Rc::new(VecModel::<HistoryRow>::from(vec![]));
+        let footer_model = Rc::new(VecModel::<FooterAction>::from(default_footer_actions()));
         window.set_items(ModelRc::from(model.clone()));
+        window.set_footer_actions(ModelRc::from(footer_model.clone()));
         Self {
             window,
             history,
             model,
+            footer_model,
             tokio,
             ids: Rc::new(RefCell::new(vec![])),
             visible: Rc::new(Cell::new(false)),
@@ -58,7 +62,7 @@ impl App {
         self.wire_row_clicked();
         self.wire_row_activated();
         self.wire_row_delete();
-        self.wire_clear();
+        self.wire_footer_clicked();
         self.wire_key_pressed();
         self.refresh_blocking();
     }
@@ -147,15 +151,27 @@ impl App {
         let h = self.history.clone();
         let t = self.tokio.clone();
         let ids = self.ids.clone();
+        let visible = self.visible.clone();
+        let weak = self.window.as_weak();
         self.window.on_row_activated(move |idx: i32| {
             let Some(id) = ids.borrow().get(idx as usize).copied() else {
                 return;
             };
             let h = h.clone();
+            // Auto-hide the window after activating an item, matching
+            // the macOS Maccy / clipb UX.
+            let weak = weak.clone();
+            let visible = visible.clone();
             t.spawn(async move {
                 if let Err(e) = h.copy_to_clipboard(id).await {
                     tracing::warn!(?e, "copy failed");
                 }
+                let _ = slint::invoke_from_event_loop(move || {
+                    if let Some(win) = weak.upgrade() {
+                        win.window().hide().ok();
+                        visible.set(false);
+                    }
+                });
             });
         });
     }
@@ -184,29 +200,54 @@ impl App {
         });
     }
 
-    fn wire_clear(&self) {
+    /// Dispatch on the action-id from the footer button that was clicked.
+    /// Adding a new footer action = add to [`default_footer_actions`] +
+    /// add an arm here.
+    fn wire_footer_clicked(&self) {
         let h = self.history.clone();
         let t = self.tokio.clone();
         let weak = self.window.as_weak();
         let model = self.model.clone();
         let ids = self.ids.clone();
-        self.window.on_clear_clicked(move || {
-            let h = h.clone();
-            let weak = weak.clone();
-            let model = model.clone();
-            let ids = ids.clone();
-            t.spawn(async move {
-                let _ = h.clear_unpinned().await;
-                let items = h.snapshot().await;
-                let _ = slint::invoke_from_event_loop(move || {
-                    apply_items(&weak, &model, &ids, items, 0);
-                });
-            });
+        self.window.on_footer_clicked(move |action_id: SharedString| {
+            match action_id.as_str() {
+                "clear" => {
+                    let h = h.clone();
+                    let weak = weak.clone();
+                    let model = model.clone();
+                    let ids = ids.clone();
+                    t.spawn(async move {
+                        let _ = h.clear_unpinned().await;
+                        let items = h.snapshot().await;
+                        let _ = slint::invoke_from_event_loop(move || {
+                            apply_items(&weak, &model, &ids, items, 0);
+                        });
+                    });
+                }
+                "prefs" => {
+                    // TODO: settings window. For now just log.
+                    tracing::info!("preferences not implemented yet");
+                }
+                "about" => {
+                    tracing::info!("klipa — cross-platform clipboard manager");
+                }
+                "quit" => {
+                    slint::quit_event_loop().ok();
+                }
+                other => tracing::warn!(?other, "unknown footer action"),
+            }
         });
     }
 
-    /// Richer key handling: arrow nav, Enter/Escape, plus Cmd/Ctrl-K
-    /// for "clear search" and Cmd/Ctrl-Backspace for delete-selection.
+    /// Key handling:
+    /// - ↑ / ↓                 — move selection
+    /// - Enter                  — activate (copy) selected row
+    /// - Esc                    — clear query, else hide window
+    /// - Cmd/Ctrl + 1…9         — activate that row directly
+    /// - Cmd/Ctrl + K           — clear search
+    /// - Cmd/Ctrl + Backspace   — delete selection
+    /// - Cmd/Ctrl + Q           — quit
+    /// - Cmd/Ctrl + ,           — open preferences (placeholder)
     fn wire_key_pressed(&self) {
         let weak = self.window.as_weak();
         let visible = self.visible.clone();
@@ -217,20 +258,39 @@ impl App {
             let total = win.get_items().row_count() as i32;
             let sel = win.get_selected_index();
             let mods = &event.modifiers;
-            let primary = mods.control || mods.meta; // Ctrl on Win/Linux, Cmd on macOS
+            let primary = mods.control || mods.meta;
 
-            // Modifier chords first (so Cmd-K doesn't also match the K key).
+            // Modifier chords first so plain text fall-throughs don't fire.
             if primary {
                 match event.text.as_str() {
                     "k" | "K" => {
                         win.set_query(SharedString::from(""));
                         return;
                     }
-                    "\u{8}" /* backspace */ => {
+                    "q" | "Q" => {
+                        slint::quit_event_loop().ok();
+                        return;
+                    }
+                    "," => {
+                        win.invoke_footer_clicked(SharedString::from("prefs"));
+                        return;
+                    }
+                    "\u{8}" => {
                         if sel >= 0 {
                             win.invoke_row_delete_requested(sel);
                         }
                         return;
+                    }
+                    digit if digit.len() == 1 => {
+                        if let Some(d) = digit.chars().next().and_then(|c| c.to_digit(10)) {
+                            if (1..=9).contains(&d) {
+                                let idx = (d as i32) - 1;
+                                if idx < total {
+                                    win.invoke_row_activated(idx);
+                                }
+                                return;
+                            }
+                        }
                     }
                     _ => {}
                 }
@@ -272,6 +332,38 @@ impl App {
     }
 }
 
+/// Static footer-action list, rendered below the history list.
+/// Mirrors the macOS Maccy / clipb menu (Clear / Preferences / About / Quit).
+fn default_footer_actions() -> Vec<FooterAction> {
+    let cmd = if cfg!(target_os = "macos") { "⌘" } else { "Ctrl+" };
+    vec![
+        FooterAction {
+            label: SharedString::from("Clear"),
+            shortcut_label: SharedString::from(format!("⌥{cmd}⌫")),
+            action_id: SharedString::from("clear"),
+            is_selected: false,
+        },
+        FooterAction {
+            label: SharedString::from("Preferences…"),
+            shortcut_label: SharedString::from(format!("{cmd},")),
+            action_id: SharedString::from("prefs"),
+            is_selected: false,
+        },
+        FooterAction {
+            label: SharedString::from("About"),
+            shortcut_label: SharedString::from(""),
+            action_id: SharedString::from("about"),
+            is_selected: false,
+        },
+        FooterAction {
+            label: SharedString::from("Quit"),
+            shortcut_label: SharedString::from(format!("{cmd}Q")),
+            action_id: SharedString::from("quit"),
+            is_selected: false,
+        },
+    ]
+}
+
 /// Replace the visible model with `items` and select index `select`.
 /// Lives at module scope so each callback fn can call it without
 /// cloning the App handle.
@@ -283,14 +375,23 @@ fn apply_items(
     select: i32,
 ) {
     let new_ids: Vec<HistoryItemId> = items.iter().map(|i| i.id).collect();
+    let cmd = if cfg!(target_os = "macos") { "⌘" } else { "Ctrl+" };
     let rows: Vec<HistoryRow> = items
         .into_iter()
         .enumerate()
-        .map(|(idx, it)| HistoryRow {
-            id: SharedString::from(it.id.0.to_string()),
-            title: SharedString::from(it.title),
-            pin: SharedString::from(it.pin.unwrap_or_default()),
-            is_selected: idx as i32 == select,
+        .map(|(idx, it)| {
+            let shortcut_label = if idx < 9 {
+                SharedString::from(format!("{cmd}{}", idx + 1))
+            } else {
+                SharedString::from("")
+            };
+            HistoryRow {
+                id: SharedString::from(it.id.0.to_string()),
+                title: SharedString::from(it.title),
+                pin: SharedString::from(it.pin.unwrap_or_default()),
+                shortcut_label,
+                is_selected: idx as i32 == select,
+            }
         })
         .collect();
     ids.replace(new_ids);
