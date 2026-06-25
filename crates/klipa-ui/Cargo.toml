@@ -1,0 +1,38 @@
+[package]
+name = "klipa-ui"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "klipa"
+path = "src/main.rs"
+
+[build-dependencies]
+slint-build = "1.8"
+
+[dependencies]
+klipa-core = { path = "../klipa-core" }
+# Use the `compat-1-2` feature set with the femtovg renderer for the
+# smallest cross-platform binary that still gives us GPU acceleration.
+slint = { version = "1.8", default-features = false, features = [
+    "std",
+    "compat-1-2",
+    "backend-winit",
+    "renderer-femtovg",
+] }
+serde = { workspace = true }
+serde_json = "1"
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+async-trait = { workspace = true }
+arboard = "3"
+rusqlite = { version = "0.31", features = ["bundled"] }
+time = { version = "0.3", features = ["serde"] }
+uuid = { version = "1", features = ["v4", "serde"] }
+directories = "5"
+global-hotkey = "0.5"
+tray-icon = "0.19"
+active-win-pos-rs = "0.9"
