@@ -10,7 +10,7 @@
 
 use klipa_core::{HistoryItem, HistoryItemId, HistoryService, SearchMode};
 use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel};
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 use std::sync::Arc;
 use tokio::runtime::Handle as TokioHandle;
@@ -27,6 +27,10 @@ pub struct App {
     model: Rc<VecModel<HistoryRow>>,
     tokio: TokioHandle,
     ids: Ids,
+    /// Shadow of the window's visible state — Slint's `Window` API
+    /// doesn't expose `is_visible()` portably, so we mirror it here.
+    /// Wrapped in `Rc` so internal closures (Esc key, etc.) can mutate.
+    visible: Rc<Cell<bool>>,
 }
 
 impl App {
@@ -40,6 +44,7 @@ impl App {
             model,
             tokio,
             ids: Rc::new(RefCell::new(vec![])),
+            visible: Rc::new(Cell::new(false)),
         }
     }
 
@@ -58,28 +63,36 @@ impl App {
         self.refresh_blocking();
     }
 
+    /// Run the Slint event loop *without* showing the window. Menubar
+    /// apps stay hidden until the tray icon or global hotkey summons
+    /// them; `KlipaWindow::run()` would force an initial show, so we
+    /// call the lower-level `run_event_loop()` instead.
     pub fn run(&self) -> Result<(), slint::PlatformError> {
-        self.window.run()
+        slint::run_event_loop()
     }
 
     // ── Public helpers used by main.rs (hotkey / tray)──────────────────
 
     pub fn show_and_focus(&self) {
-        let win = self.window.window();
-        win.show().ok();
+        if !self.visible.get() {
+            self.window.window().show().ok();
+            self.visible.set(true);
+        }
     }
 
     pub fn hide(&self) {
-        let win = self.window.window();
-        win.hide().ok();
+        if self.visible.get() {
+            self.window.window().hide().ok();
+            self.visible.set(false);
+        }
     }
 
     pub fn toggle(&self) {
-        // Slint doesn't expose is-visible directly across all platforms,
-        // so we shadow it via a property if we need it later. For now
-        // each call is idempotent via the window's own state.
-        let win = self.window.window();
-        win.show().ok();
+        if self.visible.get() {
+            self.hide();
+        } else {
+            self.show_and_focus();
+        }
     }
 
     pub fn refresh_async(&self) {
@@ -196,6 +209,7 @@ impl App {
     /// for "clear search" and Cmd/Ctrl-Backspace for delete-selection.
     fn wire_key_pressed(&self) {
         let weak = self.window.as_weak();
+        let visible = self.visible.clone();
         self.window.on_key_pressed(move |event| {
             let Some(win) = weak.upgrade() else {
                 return;
@@ -242,6 +256,7 @@ impl App {
                 t if t == slint::platform::Key::Escape.as_str() => {
                     if win.get_query().is_empty() {
                         win.window().hide().ok();
+                        visible.set(false);
                     } else {
                         win.set_query(SharedString::from(""));
                     }
