@@ -36,4 +36,3 @@ directories = "5"
 global-hotkey = "0.5"
 tray-icon = "0.19"
 active-win-pos-rs = "0.9"
-image = { version = "0.25", default-features = false, features = ["png"] }
