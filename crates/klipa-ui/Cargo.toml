@@ -36,3 +36,11 @@ directories = "5"
 global-hotkey = "0.5"
 tray-icon = "0.19"
 active-win-pos-rs = "0.9"
+
+# macOS-only: convert the process to a menubar accessory app
+# (no dock icon, no main menu) by calling
+# NSApplication.setActivationPolicy(.accessory) at startup.
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.5"
+objc2-app-kit = { version = "0.2", features = ["NSApplication"] }
+objc2-foundation = "0.2"

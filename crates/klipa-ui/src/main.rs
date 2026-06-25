@@ -6,6 +6,7 @@
 mod adapters;
 mod app;
 mod hotkey;
+mod platform;
 mod tray;
 
 use adapters::{clipboard::ArboardClipboard, storage::SqliteStore};
@@ -23,6 +24,11 @@ fn main() {
         )
         .init();
 
+    // Convert the process into a menubar-only accessory before any
+    // window appears. No dock icon, no main menu — clipboard apps live
+    // in the status bar, not the dock.
+    platform::make_menubar_only();
+
     // ── Async runtime ──────────────────────────────────────────────────
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .worker_threads(2)
@@ -35,7 +41,10 @@ fn main() {
     let history = handle.block_on(async {
         let store = Arc::new(SqliteStore::new().await.expect("storage init"));
         let clipboard = Arc::new(ArboardClipboard::new());
-        let svc = Arc::new(HistoryService::new(store, clipboard, 200));
+        // Unlimited history — usize::MAX means the cap-enforcement
+        // branch in HistoryService::ingest never triggers. SQLite holds
+        // everything; the in-memory mirror grows linearly with usage.
+        let svc = Arc::new(HistoryService::new(store, clipboard, usize::MAX));
         svc.load().await.expect("history load");
         svc
     });

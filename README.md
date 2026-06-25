@@ -12,19 +12,40 @@ Sibling projects:
 `klipa` does **not** share code with either; it shares behavior contracts
 (search rules, sort rules, history capping, dedup).
 
-## Memory budget (hard constraint)
+## Behavior
 
-`klipa` is built to never cross **100 MB RSS in any case, ever.**
+klipa is a **menubar-only app**. There is no dock icon, no taskbar
+entry, no main menu. On launch the window stays hidden and the app
+shows up as a clipboard glyph in the system status bar.
+
+To open it:
+- click the tray icon → "Show klipa"
+- or press **Cmd+Shift+V** (macOS) / **Ctrl+Shift+V** (Win/Linux).
+
+To dismiss it:
+- press **Esc**, or
+- press the global hotkey again.
+
+History is **unlimited** — every copy is persisted to SQLite and kept
+forever. The in-memory mirror grows linearly with usage; see below.
+
+## Memory budget
+
+Designed to sit far below **100 MB RSS** in normal use:
 
 | Component | Typical RSS |
 |---|---|
 | Rust process (core + adapters + tokio runtime) | ~10-15 MB |
 | Slint UI (femtovg renderer, GPU-accelerated) | ~15-25 MB |
 | GPU buffers (OpenGL / Metal / D3D) | ~5-10 MB |
-| History data (200 items) | <1 MB |
-| **Total steady-state** | **~30-50 MB** — headroom: 50-70 MB under cap |
+| History data (~200 bytes / item) | ~0.2 MB per 1,000 items |
+| **Total at 1,000 items** | **~30-50 MB** |
+| **Total at 100,000 items** | **~50-70 MB** |
+| **Total at ~250,000 items** | nearing the 100 MB cap |
 
-If RSS climbs over 60 MB in steady state, that's a regression and a bug.
+Since history is unlimited, RAM grows with use. At typical clipboard
+volume (~50-200 items/day) you'll hit 100 MB after ~3 years. If that
+becomes a concern, add a `clear_old` use case or a per-session cap.
 
 ## Architecture (Clean / Layered)
 
