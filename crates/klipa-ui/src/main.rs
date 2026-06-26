@@ -1,0 +1,142 @@
+//! Composition root.
+//!
+//! klipa is an ultralight, menubar-only clipboard manager: the entire
+//! UI is the tray dropdown (see `tray.rs`). This wires the local JSON
+//! store, the clipboard adapter + watcher, and a minimal winit event
+//! loop that pumps the OS run loop and the tray menu - no window, no
+//! GPU renderer, nothing logged or uploaded.
+
+// Release Windows build runs as a GUI app (no console window).
+#![cfg_attr(all(target_os = "windows", not(debug_assertions)), windows_subsystem = "windows")]
+
+mod adapters;
+mod platform;
+mod tray;
+
+use adapters::{clipboard::ArboardClipboard, storage::JsonStore};
+use klipa_core::{HistoryItemId, HistoryService};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+use std::time::{Duration, Instant};
+use winit::application::ApplicationHandler;
+use winit::event::WindowEvent;
+use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
+use winit::window::WindowId;
+
+/// Keep at most this many entries (newest first). Plenty for a
+/// menubar dropdown; the file stays small.
+const HISTORY_CAP: usize = 200;
+/// How often the loop wakes to drain menu clicks / refresh the menu.
+const TICK: Duration = Duration::from_millis(200);
+
+struct Klipa {
+    history: Arc<HistoryService>,
+    rt: tokio::runtime::Handle,
+    /// Set by the clipboard watcher when new history lands.
+    dirty: Arc<AtomicBool>,
+    tray: Option<tray::Tray>,
+}
+
+impl Klipa {
+    fn rebuild_menu(&self) {
+        if let Some(tray) = &self.tray {
+            let items = self.rt.block_on(self.history.snapshot());
+            tray.set_history(&items);
+        }
+    }
+}
+
+impl ApplicationHandler for Klipa {
+    fn resumed(&mut self, _event_loop: &ActiveEventLoop) {
+        if self.tray.is_none() {
+            // macOS: drop the Dock icon / main menu now that the run
+            // loop exists. No-op elsewhere.
+            platform::make_menubar_only();
+            self.tray = Some(tray::Tray::new());
+            self.rebuild_menu();
+            tracing::info!("klipa ready - menubar icon active");
+        }
+    }
+
+    // No windows, so nothing to handle here.
+    fn window_event(&mut self, _e: &ActiveEventLoop, _id: WindowId, _ev: WindowEvent) {}
+
+    fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
+        for id in tray::poll_menu_events() {
+            match id.as_ref() {
+                tray::QUIT_ID => {
+                    event_loop.exit();
+                    return;
+                }
+                tray::CLEAR_ID => {
+                    let _ = self.rt.block_on(self.history.clear_unpinned());
+                    self.rebuild_menu();
+                }
+                other => {
+                    if let Ok(uuid) = uuid::Uuid::parse_str(other) {
+                        if let Err(e) = self
+                            .rt
+                            .block_on(self.history.copy_to_clipboard(HistoryItemId(uuid)))
+                        {
+                            tracing::warn!(?e, "copy failed");
+                        }
+                    }
+                }
+            }
+        }
+
+        if self.dirty.swap(false, Ordering::AcqRel) {
+            self.rebuild_menu();
+        }
+
+        event_loop.set_control_flow(ControlFlow::WaitUntil(Instant::now() + TICK));
+    }
+}
+
+fn main() {
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()),
+        )
+        .init();
+
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(2)
+        .enable_all()
+        .build()
+        .expect("tokio runtime");
+    let handle = runtime.handle().clone();
+
+    // Domain service backed by the local JSON file + arboard clipboard.
+    let history = handle.block_on(async {
+        let store = Arc::new(JsonStore::new().await.expect("storage init"));
+        let clipboard = Arc::new(ArboardClipboard::new());
+        let svc = Arc::new(HistoryService::new(store, clipboard, HISTORY_CAP));
+        svc.load().await.expect("history load");
+        svc
+    });
+
+    // Clipboard watcher: flips `dirty` so the loop refreshes the menu.
+    let dirty = Arc::new(AtomicBool::new(false));
+    {
+        let svc = history.clone();
+        let d = dirty.clone();
+        handle.spawn(async move {
+            adapters::watcher::run(svc, move || d.store(true, Ordering::Release)).await;
+        });
+    }
+
+    let event_loop = EventLoop::new().expect("event loop");
+    event_loop.set_control_flow(ControlFlow::Wait);
+    let mut app = Klipa {
+        history,
+        rt: handle,
+        dirty,
+        tray: None,
+    };
+    if let Err(e) = event_loop.run_app(&mut app) {
+        tracing::error!(?e, "event loop exited with error");
+    }
+
+    drop(runtime);
+}
