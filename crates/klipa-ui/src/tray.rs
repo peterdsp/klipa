@@ -4,9 +4,17 @@
 //! down the recent clipboard entries; clicking an entry copies it back
 //! to the clipboard. No window, no GPU, no renderer - hence tiny.
 
-use klipa_core::HistoryItem;
-use tray_icon::menu::{Menu, MenuEvent, MenuId, MenuItem, PredefinedMenuItem};
+use crate::adapters::clipboard::{decode_png, read_image_png};
+use klipa_core::{HistoryItem, ItemKind};
+use std::cell::RefCell;
+use std::collections::HashMap;
+use tray_icon::menu::{
+    Icon as MenuIcon, IconMenuItem, Menu, MenuEvent, MenuId, MenuItem, PredefinedMenuItem,
+};
 use tray_icon::{Icon, TrayIcon, TrayIconBuilder};
+
+/// Edge length of the little preview icon shown next to image entries.
+const THUMB: usize = 28;
 
 /// Stable ids for the two fixed actions at the bottom of the menu.
 pub const CLEAR_ID: &str = "__klipa_clear";
@@ -19,12 +27,15 @@ const LABEL_MAX_CHARS: usize = 48;
 
 pub struct Tray {
     icon: TrayIcon,
+    /// Cache of generated thumbnails keyed by the image reference id,
+    /// so we decode each image file at most once.
+    thumbs: RefCell<HashMap<String, (Vec<u8>, u32, u32)>>,
 }
 
 impl Tray {
     pub fn new() -> Self {
         let builder = TrayIconBuilder::new()
-            .with_menu(Box::new(build_menu(&[])))
+            .with_menu(Box::new(Menu::new()))
             .with_tooltip("klipa - clipboard history")
             .with_icon(clipboard_glyph());
 
@@ -33,35 +44,84 @@ impl Tray {
 
         Self {
             icon: builder.build().expect("tray icon"),
+            thumbs: RefCell::new(HashMap::new()),
         }
     }
 
     /// Rebuild the dropdown from the current history snapshot.
     pub fn set_history(&self, items: &[HistoryItem]) {
-        self.icon.set_menu(Some(Box::new(build_menu(items))));
+        let menu = Menu::new();
+        if items.is_empty() {
+            let _ = menu.append(&MenuItem::new("No clipboard history yet", false, None));
+        } else {
+            for it in items.iter().take(MAX_MENU_ITEMS) {
+                let id = it.id.0.to_string();
+                let label = menu_label(&it.title);
+                match self.image_ref(it).and_then(|r| self.thumb_icon(r)) {
+                    // Image entry -> show a small preview next to the label.
+                    Some(icon) => {
+                        let _ = menu.append(&IconMenuItem::with_id(id, label, true, Some(icon), None));
+                    }
+                    None => {
+                        let _ = menu.append(&MenuItem::with_id(id, label, true, None));
+                    }
+                }
+            }
+        }
+        let _ = menu.append(&PredefinedMenuItem::separator());
+        let _ = menu.append(&MenuItem::with_id(CLEAR_ID, "Clear history", !items.is_empty(), None));
+        let _ = menu.append(&MenuItem::with_id(QUIT_ID, "Quit klipa", true, None));
+        self.icon.set_menu(Some(Box::new(menu)));
+    }
+
+    /// The image reference id of an item, if it is an image entry.
+    fn image_ref<'a>(&self, item: &'a HistoryItem) -> Option<&'a str> {
+        item.contents
+            .iter()
+            .find(|c| matches!(c.kind, ItemKind::Image))
+            .map(|c| c.value.as_str())
+    }
+
+    /// Build (and cache) a small menu icon from an image entry.
+    fn thumb_icon(&self, reference: &str) -> Option<MenuIcon> {
+        if !self.thumbs.borrow().contains_key(reference) {
+            let png = read_image_png(reference)?;
+            let (w, h, rgba) = decode_png(&png)?;
+            let thumb = downscale(w, h, &rgba, THUMB);
+            self.thumbs
+                .borrow_mut()
+                .insert(reference.to_string(), (thumb, THUMB as u32, THUMB as u32));
+        }
+        let cache = self.thumbs.borrow();
+        let (rgba, w, h) = cache.get(reference)?;
+        MenuIcon::from_rgba(rgba.clone(), *w, *h).ok()
     }
 }
 
-fn build_menu(items: &[HistoryItem]) -> Menu {
-    let menu = Menu::new();
-    if items.is_empty() {
-        let _ = menu.append(&MenuItem::new("No clipboard history yet", false, None));
-    } else {
-        for it in items.iter().take(MAX_MENU_ITEMS) {
-            // Item id = the history UUID, so a click maps straight back.
-            let item = MenuItem::with_id(it.id.0.to_string(), menu_label(&it.title), true, None);
-            let _ = menu.append(&item);
+/// Nearest-neighbour fit of `rgba` into a `size`x`size` transparent
+/// canvas, preserving aspect ratio. Cheap and good enough for a glyph.
+fn downscale(w: usize, h: usize, rgba: &[u8], size: usize) -> Vec<u8> {
+    let mut out = vec![0u8; size * size * 4];
+    if w == 0 || h == 0 {
+        return out;
+    }
+    let scale = (size as f32 / w as f32).min(size as f32 / h as f32);
+    let tw = ((w as f32 * scale).round() as usize).max(1).min(size);
+    let th = ((h as f32 * scale).round() as usize).max(1).min(size);
+    let ox = (size - tw) / 2;
+    let oy = (size - th) / 2;
+    for ty in 0..th {
+        let sy = ty * h / th;
+        for tx in 0..tw {
+            let sx = tx * w / tw;
+            let si = (sy * w + sx) * 4;
+            let di = ((oy + ty) * size + ox + tx) * 4;
+            if si + 4 <= rgba.len() && di + 4 <= out.len() {
+                out[di..di + 4].copy_from_slice(&rgba[si..si + 4]);
+            }
         }
     }
-    let _ = menu.append(&PredefinedMenuItem::separator());
-    let _ = menu.append(&MenuItem::with_id(
-        CLEAR_ID,
-        "Clear history",
-        !items.is_empty(),
-        None,
-    ));
-    let _ = menu.append(&MenuItem::with_id(QUIT_ID, "Quit klipa", true, None));
-    menu
+    out
 }
 
 /// Collapse whitespace to single spaces and truncate for the menu.
