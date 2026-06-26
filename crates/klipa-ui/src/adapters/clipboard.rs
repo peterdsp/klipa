@@ -41,6 +41,10 @@ impl ArboardClipboard {
 /// Best-effort frontmost-application name (NSWorkspace on macOS,
 /// GetForegroundWindow on Windows, _NET_ACTIVE_WINDOW on X11).
 /// Returns None on Wayland and other unsupported environments.
+///
+/// Compiled out when the `frontmost` feature is off (e.g. the
+/// sandboxed Mac App Store build), where it always returns None.
+#[cfg(feature = "frontmost")]
 fn frontmost_app() -> Option<String> {
     match active_win_pos_rs::get_active_window() {
         Ok(win) => {
@@ -53,6 +57,11 @@ fn frontmost_app() -> Option<String> {
         }
         Err(_) => None,
     }
+}
+
+#[cfg(not(feature = "frontmost"))]
+fn frontmost_app() -> Option<String> {
+    None
 }
 
 #[async_trait]
@@ -69,24 +78,21 @@ impl ClipboardSource for ArboardClipboard {
             .find(|c| matches!(c.kind, ItemKind::Text))
             .map(|c| c.value.clone())
             .ok_or_else(|| CoreError::Invalid("no text content".into()))?;
-        tokio::task::spawn_blocking(move || {
-            let mut cb =
-                arboard::Clipboard::new().map_err(|e| CoreError::Clipboard(e.to_string()))?;
-            cb.set_text(text).map_err(|e| CoreError::Clipboard(e.to_string()))
-        })
-        .await
-        .map_err(|e| CoreError::Clipboard(e.to_string()))??;
+        // arboard is synchronous and fast; callers drive this from the
+        // UI event loop, so we run it inline rather than on a runtime.
+        let mut cb = arboard::Clipboard::new().map_err(|e| CoreError::Clipboard(e.to_string()))?;
+        // Record what we just wrote so the watcher's next poll doesn't
+        // re-ingest it as a brand-new copy.
+        if let Ok(mut last) = self.last_text.lock() {
+            *last = Some(text.clone());
+        }
+        cb.set_text(text).map_err(|e| CoreError::Clipboard(e.to_string()))?;
         Ok(())
     }
 
     async fn clear(&self) -> klipa_core::Result<()> {
-        tokio::task::spawn_blocking(|| {
-            let mut cb =
-                arboard::Clipboard::new().map_err(|e| CoreError::Clipboard(e.to_string()))?;
-            cb.clear().map_err(|e| CoreError::Clipboard(e.to_string()))
-        })
-        .await
-        .map_err(|e| CoreError::Clipboard(e.to_string()))??;
+        let mut cb = arboard::Clipboard::new().map_err(|e| CoreError::Clipboard(e.to_string()))?;
+        cb.clear().map_err(|e| CoreError::Clipboard(e.to_string()))?;
         Ok(())
     }
 }

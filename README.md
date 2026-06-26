@@ -12,6 +12,21 @@ Sibling projects:
 `klipa` does **not** share code with either; it shares behavior contracts
 (search rules, sort rules, history capping, dedup).
 
+## Install
+
+Downloads for every platform: **<https://klipa.peterdsp.dev>**
+
+| Platform | Package |
+|---|---|
+| macOS 11+ | `.pkg` (universal, signed + notarized) — also on the Mac App Store |
+| Windows 10/11 | `.exe` installer (64-bit) |
+| Linux (x86-64) | `.AppImage`, `.deb`, `.rpm`, or portable `.tar.gz` |
+
+All builds and `SHA256SUMS.txt` are attached to each
+[GitHub release](https://github.com/peterdsp/klipa/releases). See
+[`packaging/README.md`](packaging/README.md) for how the artifacts are
+built and signed.
+
 ## Behavior
 
 klipa is a **menubar-only app**. There is no dock icon, no taskbar
@@ -83,7 +98,7 @@ inside `klipa-core`, `cargo check` fails.
 ## Features
 
 - Cross-platform clipboard polling (`arboard`)
-- SQLite-backed history (`rusqlite`), default cap of 200 items
+- SQLite-backed history (`rusqlite`), unlimited by default
 - Global hotkey: **Cmd+Shift+V** (macOS) / **Ctrl+Shift+V** (Win/Linux)
 - System tray with Show / Quit menu
 - Frontmost-app capture per OS via `active-win-pos-rs`
@@ -101,6 +116,22 @@ inside `klipa-core`, `cargo check` fails.
 cargo run --release
 cargo build --release       # → target/release/klipa
 ```
+
+### Packaging
+
+Per-platform installers are produced by the scripts in [`scripts/`](scripts/)
+and, on a `v*` git tag, by the [release workflow](.github/workflows/release.yml):
+
+```bash
+./scripts/make-icons.sh        # regenerate icons from assets/icon.svg
+./scripts/package-macos.sh     # macOS Developer ID .pkg (+ notarize)
+./scripts/package-mas.sh       # Mac App Store .pkg
+pwsh scripts/package-windows.ps1   # Windows .exe installer (NSIS)
+./scripts/package-linux.sh     # .AppImage / .deb / .rpm / .tar.gz
+```
+
+See [`packaging/README.md`](packaging/README.md) for signing credentials
+and Mac App Store submission steps.
 
 ## License
 

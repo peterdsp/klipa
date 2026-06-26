@@ -3,13 +3,31 @@ name = "klipa-ui"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+description = "A small, fast, cross-platform clipboard manager."
+homepage = "https://klipa.peterdsp.dev"
+repository.workspace = true
+authors.workspace = true
 
 [[bin]]
 name = "klipa"
 path = "src/main.rs"
 
+[features]
+default = ["frontmost"]
+# Capture the frontmost app name when an item is copied. Uses
+# active-win-pos-rs (CGWindowList / accessibility). Disabled for the
+# Mac App Store build, where the sandbox forbids it.
+frontmost = ["dep:active-win-pos-rs"]
+# Mac App Store target marker: build with
+#   cargo build --no-default-features --features mas
+mas = []
+
 [build-dependencies]
 slint-build = "1.8"
+
+# Windows-only: embed the .ico and version info into klipa.exe.
+[target.'cfg(windows)'.build-dependencies]
+winresource = "0.1"
 
 [dependencies]
 klipa-core = { path = "../klipa-core" }
@@ -35,7 +53,7 @@ uuid = { version = "1", features = ["v4", "serde"] }
 directories = "5"
 global-hotkey = "0.5"
 tray-icon = "0.19"
-active-win-pos-rs = "0.9"
+active-win-pos-rs = { version = "0.9", optional = true }
 
 # macOS-only: convert the process to a menubar accessory app
 # (no dock icon, no main menu) by calling
@@ -44,3 +62,46 @@ active-win-pos-rs = "0.9"
 objc2 = "0.5"
 objc2-app-kit = { version = "0.2", features = ["NSApplication"] }
 objc2-foundation = "0.2"
+
+# ── Linux .deb (cargo-deb) ────────────────────────────────────────────
+# Run from workspace root:  cargo deb -p klipa-ui --no-build
+# Asset SOURCE paths are relative to THIS manifest's directory
+# (crates/klipa-ui); "target/..." is special-cased to the target dir.
+[package.metadata.deb]
+maintainer = "Petros Dhespollari <info@peterdsp.dev>"
+copyright = "2026, Petros Dhespollari"
+license-file = ["../../LICENSE", "0"]
+extended-description = "klipa is a small, fast clipboard manager that lives in the system tray. Pure Rust, no system WebView, no JavaScript runtime."
+section = "utils"
+priority = "optional"
+depends = "$auto"
+assets = [
+  ["target/release/klipa", "usr/bin/", "755"],
+  ["../../packaging/linux/klipa.desktop", "usr/share/applications/", "644"],
+  ["../../packaging/icons/hicolor/16x16/apps/klipa.png", "usr/share/icons/hicolor/16x16/apps/", "644"],
+  ["../../packaging/icons/hicolor/32x32/apps/klipa.png", "usr/share/icons/hicolor/32x32/apps/", "644"],
+  ["../../packaging/icons/hicolor/48x48/apps/klipa.png", "usr/share/icons/hicolor/48x48/apps/", "644"],
+  ["../../packaging/icons/hicolor/64x64/apps/klipa.png", "usr/share/icons/hicolor/64x64/apps/", "644"],
+  ["../../packaging/icons/hicolor/128x128/apps/klipa.png", "usr/share/icons/hicolor/128x128/apps/", "644"],
+  ["../../packaging/icons/hicolor/256x256/apps/klipa.png", "usr/share/icons/hicolor/256x256/apps/", "644"],
+  ["../../packaging/icons/hicolor/512x512/apps/klipa.png", "usr/share/icons/hicolor/512x512/apps/", "644"],
+]
+
+# ── Linux .rpm (cargo-generate-rpm) ───────────────────────────────────
+# Run from workspace root:  cargo generate-rpm -p crates/klipa-ui
+# Asset SOURCE paths are relative to the CURRENT WORKING DIR (repo root).
+[package.metadata.generate-rpm]
+summary = "A small, fast, cross-platform clipboard manager."
+assets = [
+  { source = "target/release/klipa", dest = "/usr/bin/klipa", mode = "755" },
+  { source = "packaging/linux/klipa.desktop", dest = "/usr/share/applications/klipa.desktop", mode = "644" },
+  { source = "packaging/icons/hicolor/16x16/apps/klipa.png", dest = "/usr/share/icons/hicolor/16x16/apps/klipa.png", mode = "644" },
+  { source = "packaging/icons/hicolor/32x32/apps/klipa.png", dest = "/usr/share/icons/hicolor/32x32/apps/klipa.png", mode = "644" },
+  { source = "packaging/icons/hicolor/48x48/apps/klipa.png", dest = "/usr/share/icons/hicolor/48x48/apps/klipa.png", mode = "644" },
+  { source = "packaging/icons/hicolor/64x64/apps/klipa.png", dest = "/usr/share/icons/hicolor/64x64/apps/klipa.png", mode = "644" },
+  { source = "packaging/icons/hicolor/128x128/apps/klipa.png", dest = "/usr/share/icons/hicolor/128x128/apps/klipa.png", mode = "644" },
+  { source = "packaging/icons/hicolor/256x256/apps/klipa.png", dest = "/usr/share/icons/hicolor/256x256/apps/klipa.png", mode = "644" },
+  { source = "packaging/icons/hicolor/512x512/apps/klipa.png", dest = "/usr/share/icons/hicolor/512x512/apps/klipa.png", mode = "644" },
+  { source = "LICENSE", dest = "/usr/share/doc/klipa/LICENSE", mode = "644" },
+]
+auto-req = "auto"

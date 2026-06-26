@@ -11,3 +11,11 @@ Thumbs.db
 .vscode/
 .idea/
 *.swp
+
+# Build / packaging output
+dist/
+*.pkg
+*.dmg
+*.AppImage
+*.deb
+*.rpm
