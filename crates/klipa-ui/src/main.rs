@@ -3,6 +3,10 @@
 //! Wires the persistent store, the clipboard adapter, the watcher loop,
 //! the global hotkey, the tray icon, and the Slint UI together.
 
+// On a release Windows build, run as a GUI app so no console window
+// flashes behind the menubar/tray UI.
+#![cfg_attr(all(target_os = "windows", not(debug_assertions)), windows_subsystem = "windows")]
+
 mod adapters;
 mod app;
 mod hotkey;
@@ -49,21 +53,23 @@ fn main() {
         svc
     });
 
+    // ── UI ─────────────────────────────────────────────────────────────
+    let app = Rc::new(App::new(history.clone(), handle.clone()));
+    app.install();
+
     // ── Clipboard watcher ──────────────────────────────────────────────
+    // Flips the App's dirty flag when a new copy is ingested; the main
+    // timer below picks it up and refreshes the model.
     {
         let svc = history.clone();
+        let dirty = app.dirty_flag();
         handle.spawn(async move {
-            adapters::watcher::run(svc, || {
-                // Nudge the Slint loop so the App's refresh path runs.
-                let _ = slint::invoke_from_event_loop(|| {});
+            adapters::watcher::run(svc, move || {
+                dirty.store(true, std::sync::atomic::Ordering::Release);
             })
             .await;
         });
     }
-
-    // ── UI ─────────────────────────────────────────────────────────────
-    let app = Rc::new(App::new(history, handle));
-    app.install();
 
     // Tray + hotkey must be created on the main thread (Cocoa/Win32),
     // before the Slint event loop owns it.
@@ -102,8 +108,8 @@ fn main() {
                         app_for_timer.toggle();
                     }
                 }
-                // Watcher nudge → refresh model.
-                app_for_timer.refresh_async();
+                // Refresh the model only if the watcher saw a change.
+                app_for_timer.refresh_if_dirty();
             },
         );
         // Leak the timer so it lives for the whole program.

@@ -9,8 +9,8 @@ use crate::domain::ports::{ClipboardSource, HistoryStore, PasteboardEvent};
 use crate::usecases::search::{SearchMode, Searcher};
 use crate::usecases::sorter::Sorter;
 use crate::Result;
+use async_lock::RwLock;
 use std::sync::Arc;
-use tokio::sync::RwLock;
 
 pub struct HistoryService {
     store: Arc<dyn HistoryStore>,

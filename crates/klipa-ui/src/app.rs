@@ -12,6 +12,7 @@ use klipa_core::{HistoryItem, HistoryItemId, HistoryService, SearchMode};
 use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel};
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use tokio::runtime::Handle as TokioHandle;
 
@@ -32,6 +33,10 @@ pub struct App {
     /// doesn't expose `is_visible()` portably, so we mirror it here.
     /// Wrapped in `Rc` so internal closures (Esc key, etc.) can mutate.
     visible: Rc<Cell<bool>>,
+    /// Set by the clipboard watcher when new history lands; the main
+    /// timer consumes it to refresh the model only when something
+    /// actually changed (instead of rebuilding 10×/sec).
+    dirty: Arc<AtomicBool>,
 }
 
 impl App {
@@ -49,11 +54,25 @@ impl App {
             tokio,
             ids: Rc::new(RefCell::new(vec![])),
             visible: Rc::new(Cell::new(false)),
+            dirty: Arc::new(AtomicBool::new(true)),
         }
     }
 
     pub fn window(&self) -> &KlipaWindow {
         &self.window
+    }
+
+    /// Shared flag the clipboard watcher sets to request a UI refresh.
+    pub fn dirty_flag(&self) -> Arc<AtomicBool> {
+        self.dirty.clone()
+    }
+
+    /// Refresh the model if (and only if) the watcher flagged a change.
+    /// Called from the main timer each tick.
+    pub fn refresh_if_dirty(&self) {
+        if self.dirty.swap(false, Ordering::AcqRel) {
+            self.refresh_async();
+        }
     }
 
     /// Install all callbacks. Call once, before [`Self::run`].
@@ -99,16 +118,25 @@ impl App {
         }
     }
 
+    /// Re-pull the current view (respecting the active query) and
+    /// reapply it, preserving the user's selection. Runs on the Slint
+    /// event loop, so it can touch the (non-Send) Slint models directly.
     pub fn refresh_async(&self) {
         let h = self.history.clone();
         let weak = self.window.as_weak();
         let model = self.model.clone();
         let ids = self.ids.clone();
-        self.tokio.spawn(async move {
-            let items = h.snapshot().await;
-            let _ = slint::invoke_from_event_loop(move || {
-                apply_items(&weak, &model, &ids, items, 0);
-            });
+        let _ = slint::spawn_local(async move {
+            let Some(win) = weak.upgrade() else { return };
+            let q = win.get_query();
+            let prev_sel = win.get_selected_index();
+            let items = if q.is_empty() {
+                h.snapshot().await
+            } else {
+                h.query(&q, SearchMode::Mixed).await
+            };
+            let sel = prev_sel.clamp(0, (items.len() as i32 - 1).max(0));
+            apply_items(&weak, &model, &ids, items, sel);
         });
     }
 
@@ -116,7 +144,6 @@ impl App {
 
     fn wire_query_changed(&self) {
         let h = self.history.clone();
-        let t = self.tokio.clone();
         let weak = self.window.as_weak();
         let model = self.model.clone();
         let ids = self.ids.clone();
@@ -125,15 +152,13 @@ impl App {
             let weak = weak.clone();
             let model = model.clone();
             let ids = ids.clone();
-            t.spawn(async move {
+            let _ = slint::spawn_local(async move {
                 let items = if q.is_empty() {
                     h.snapshot().await
                 } else {
                     h.query(&q, SearchMode::Mixed).await
                 };
-                let _ = slint::invoke_from_event_loop(move || {
-                    apply_items(&weak, &model, &ids, items, 0);
-                });
+                apply_items(&weak, &model, &ids, items, 0);
             });
         });
     }
@@ -149,7 +174,6 @@ impl App {
 
     fn wire_row_activated(&self) {
         let h = self.history.clone();
-        let t = self.tokio.clone();
         let ids = self.ids.clone();
         let visible = self.visible.clone();
         let weak = self.window.as_weak();
@@ -158,27 +182,23 @@ impl App {
                 return;
             };
             let h = h.clone();
-            // Auto-hide the window after activating an item, matching
-            // the macOS Maccy / clipb UX.
+            // Auto-hide the window after activating an item.
             let weak = weak.clone();
             let visible = visible.clone();
-            t.spawn(async move {
+            let _ = slint::spawn_local(async move {
                 if let Err(e) = h.copy_to_clipboard(id).await {
                     tracing::warn!(?e, "copy failed");
                 }
-                let _ = slint::invoke_from_event_loop(move || {
-                    if let Some(win) = weak.upgrade() {
-                        win.window().hide().ok();
-                        visible.set(false);
-                    }
-                });
+                if let Some(win) = weak.upgrade() {
+                    win.window().hide().ok();
+                    visible.set(false);
+                }
             });
         });
     }
 
     fn wire_row_delete(&self) {
         let h = self.history.clone();
-        let t = self.tokio.clone();
         let weak = self.window.as_weak();
         let model = self.model.clone();
         let ids = self.ids.clone();
@@ -190,12 +210,10 @@ impl App {
             let weak = weak.clone();
             let model = model.clone();
             let ids = ids.clone();
-            t.spawn(async move {
+            let _ = slint::spawn_local(async move {
                 let _ = h.delete(id).await;
                 let items = h.snapshot().await;
-                let _ = slint::invoke_from_event_loop(move || {
-                    apply_items(&weak, &model, &ids, items, 0);
-                });
+                apply_items(&weak, &model, &ids, items, 0);
             });
         });
     }
@@ -205,7 +223,6 @@ impl App {
     /// add an arm here.
     fn wire_footer_clicked(&self) {
         let h = self.history.clone();
-        let t = self.tokio.clone();
         let weak = self.window.as_weak();
         let model = self.model.clone();
         let ids = self.ids.clone();
@@ -216,12 +233,10 @@ impl App {
                     let weak = weak.clone();
                     let model = model.clone();
                     let ids = ids.clone();
-                    t.spawn(async move {
+                    let _ = slint::spawn_local(async move {
                         let _ = h.clear_unpinned().await;
                         let items = h.snapshot().await;
-                        let _ = slint::invoke_from_event_loop(move || {
-                            apply_items(&weak, &model, &ids, items, 0);
-                        });
+                        apply_items(&weak, &model, &ids, items, 0);
                     });
                 }
                 "prefs" => {
@@ -297,31 +312,26 @@ impl App {
             }
 
             // Bare keys.
-            match event.text.as_str() {
-                t if t == slint::platform::Key::DownArrow.as_str() => {
-                    if total > 0 {
-                        win.set_selected_index((sel + 1).min(total - 1).max(0));
-                    }
+            let text = event.text.as_str();
+            if is_key(text, slint::platform::Key::DownArrow) {
+                if total > 0 {
+                    win.set_selected_index((sel + 1).min(total - 1).max(0));
                 }
-                t if t == slint::platform::Key::UpArrow.as_str() => {
-                    if total > 0 {
-                        win.set_selected_index((sel - 1).max(0));
-                    }
+            } else if is_key(text, slint::platform::Key::UpArrow) {
+                if total > 0 {
+                    win.set_selected_index((sel - 1).max(0));
                 }
-                t if t == slint::platform::Key::Return.as_str() => {
-                    if sel >= 0 {
-                        win.invoke_row_activated(sel);
-                    }
+            } else if is_key(text, slint::platform::Key::Return) {
+                if sel >= 0 {
+                    win.invoke_row_activated(sel);
                 }
-                t if t == slint::platform::Key::Escape.as_str() => {
-                    if win.get_query().is_empty() {
-                        win.window().hide().ok();
-                        visible.set(false);
-                    } else {
-                        win.set_query(SharedString::from(""));
-                    }
+            } else if is_key(text, slint::platform::Key::Escape) {
+                if win.get_query().is_empty() {
+                    win.window().hide().ok();
+                    visible.set(false);
+                } else {
+                    win.set_query(SharedString::from(""));
                 }
-                _ => {}
             }
         });
     }
@@ -332,8 +342,17 @@ impl App {
     }
 }
 
-/// Static footer-action list, rendered below the history list.
-/// Mirrors the macOS Maccy / clipb menu (Clear / Preferences / About / Quit).
+/// True when a key-event's text equals the given named [`Key`].
+/// Slint encodes named keys as a private-use Unicode char in
+/// `event.text`; convert the key to that char and compare.
+fn is_key(text: &str, key: slint::platform::Key) -> bool {
+    let c: char = key.into();
+    let mut buf = [0u8; 4];
+    text == c.encode_utf8(&mut buf)
+}
+
+/// Static footer-action list, rendered below the history list
+/// (Clear / Preferences / About / Quit).
 fn default_footer_actions() -> Vec<FooterAction> {
     let cmd = if cfg!(target_os = "macos") { "⌘" } else { "Ctrl+" };
     vec![
