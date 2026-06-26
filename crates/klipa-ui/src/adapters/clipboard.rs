@@ -2,6 +2,7 @@
 //! images (e.g. screenshots). Images are stored PNG-compressed so the
 //! local history file stays small.
 
+use crate::paths;
 use async_trait::async_trait;
 use base64::Engine as _;
 use klipa_core::{
@@ -11,6 +12,7 @@ use std::borrow::Cow;
 use std::io::Cursor;
 use std::sync::Mutex;
 use tokio::sync::Notify;
+use uuid::Uuid;
 
 pub struct ArboardClipboard {
     /// Signature of the last thing we saw, so we don't re-capture the
@@ -53,23 +55,31 @@ impl ArboardClipboard {
             let sig = format!("i:{}x{}:{:016x}", img.width, img.height, hash(&img.bytes));
             if self.is_new(&sig) {
                 if let Some(png) = encode_png(img.width, img.height, &img.bytes) {
-                    let value = base64::engine::general_purpose::STANDARD.encode(&png);
-                    return Some(PasteboardEvent {
-                        // A leading text label gives the entry a readable
-                        // title/menu line; the image is what gets pasted
-                        // (write() prefers the image content).
-                        contents: vec![
-                            ItemContent {
-                                kind: ItemKind::Text,
-                                value: format!("[Image {}x{}]", img.width, img.height),
-                            },
-                            ItemContent {
-                                kind: ItemKind::Image,
-                                value,
-                            },
-                        ],
-                        source_application: frontmost_app(),
-                    });
+                    // Write the full PNG to disk and keep only a short
+                    // reference id in history, so memory/history stay tiny.
+                    let id = Uuid::new_v4().to_string();
+                    if let Some(path) = paths::image_path(&id) {
+                        if let Some(dir) = path.parent() {
+                            let _ = std::fs::create_dir_all(dir);
+                        }
+                        if std::fs::write(&path, &png).is_ok() {
+                            return Some(PasteboardEvent {
+                                // Leading text label = the readable menu
+                                // line; the image ref is what gets pasted.
+                                contents: vec![
+                                    ItemContent {
+                                        kind: ItemKind::Text,
+                                        value: format!("[Image {}x{}]", img.width, img.height),
+                                    },
+                                    ItemContent {
+                                        kind: ItemKind::Image,
+                                        value: id,
+                                    },
+                                ],
+                                source_application: frontmost_app(),
+                            });
+                        }
+                    }
                 }
             }
         }
@@ -127,7 +137,20 @@ fn encode_png(width: usize, height: usize, rgba: &[u8]) -> Option<Vec<u8>> {
     Some(buf)
 }
 
-fn decode_png(bytes: &[u8]) -> Option<(usize, usize, Vec<u8>)> {
+/// Load an image entry's PNG bytes. New entries reference a file on
+/// disk; legacy entries inlined base64 PNG directly in the value.
+pub fn read_image_png(value: &str) -> Option<Vec<u8>> {
+    if let Some(path) = paths::image_path(value) {
+        if let Ok(bytes) = std::fs::read(&path) {
+            return Some(bytes);
+        }
+    }
+    base64::engine::general_purpose::STANDARD
+        .decode(value.as_bytes())
+        .ok()
+}
+
+pub fn decode_png(bytes: &[u8]) -> Option<(usize, usize, Vec<u8>)> {
     let decoder = png::Decoder::new(Cursor::new(bytes));
     let mut reader = decoder.read_info().ok()?;
     let mut buf = vec![0u8; reader.output_buffer_size()];
@@ -147,11 +170,10 @@ impl ClipboardSource for ArboardClipboard {
         let mut cb =
             arboard::Clipboard::new().map_err(|e| CoreError::Clipboard(e.to_string()))?;
 
-        // Image item -> decode the stored PNG and set it on the clipboard.
+        // Image item -> load the stored PNG and set it on the clipboard.
         if let Some(c) = item.contents.iter().find(|c| matches!(c.kind, ItemKind::Image)) {
-            let png = base64::engine::general_purpose::STANDARD
-                .decode(c.value.as_bytes())
-                .map_err(|e| CoreError::Clipboard(e.to_string()))?;
+            let png = read_image_png(&c.value)
+                .ok_or_else(|| CoreError::Clipboard("image not found".into()))?;
             let (width, height, rgba) =
                 decode_png(&png).ok_or_else(|| CoreError::Clipboard("bad image data".into()))?;
             cb.set_image(arboard::ImageData {
