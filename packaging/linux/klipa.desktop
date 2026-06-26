@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=klipa
+GenericName=Clipboard Manager
+Comment=A small, fast clipboard manager
+Exec=klipa
+Icon=klipa
+Terminal=false
+Categories=Utility;GTK;
+Keywords=clipboard;history;copy;paste;
+StartupNotify=false

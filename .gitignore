@@ -1,0 +1,20 @@
+# Rust
+target/
+**/*.rs.bk
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+*.swp
+
+# Build / packaging output
+dist/
+*.pkg
+*.dmg
+*.AppImage
+*.deb
+*.rpm
