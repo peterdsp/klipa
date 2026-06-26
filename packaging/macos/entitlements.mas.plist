@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Entitlements for the MAC APP STORE build. The App Store requires the
+  app sandbox. Replace TEAMID below with your Apple Team ID.
+  NOTE: the App Sandbox blocks frontmost-window inspection
+  (active-win-pos-rs); for the MAS build that capture is compiled out
+  via the `mas` cargo feature. See packaging/macos/README.md.
+-->
+<plist version="1.0">
+<dict>
+  <key>com.apple.security.app-sandbox</key>
+  <true/>
+  <key>com.apple.application-identifier</key>
+  <string>TEAMID.dev.peterdsp.klipa</string>
+  <key>com.apple.developer.team-identifier</key>
+  <string>TEAMID</string>
+  <key>com.apple.security.files.user-selected.read-write</key>
+  <true/>
+</dict>
+</plist>

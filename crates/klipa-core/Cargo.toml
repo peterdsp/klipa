@@ -8,6 +8,10 @@ license.workspace = true
 serde = { workspace = true }
 thiserror = { workspace = true }
 async-trait = { workspace = true }
+# Runtime-agnostic async RwLock — keeps klipa-core free of any async
+# runtime (no tokio) while still allowing the state lock to be held
+# across .await points.
+async-lock = "3"
 uuid = { version = "1", features = ["v4", "serde"] }
 fuzzy-matcher = "0.3"
 regex = "1"
