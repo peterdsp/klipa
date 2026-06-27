@@ -13,8 +13,9 @@ use tray_icon::menu::{
 };
 use tray_icon::{Icon, TrayIcon, TrayIconBuilder};
 
-/// Edge length of the little preview icon shown next to image entries.
-const THUMB: usize = 28;
+/// Edge length of the preview thumbnail shown next to image entries.
+/// Big enough to recognise the image at a glance, no hover needed.
+const THUMB: usize = 64;
 
 /// Stable ids for the two fixed actions at the bottom of the menu.
 pub const CLEAR_ID: &str = "__klipa_clear";
