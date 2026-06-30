@@ -23,3 +23,9 @@ pub fn images_dir() -> Option<PathBuf> {
 pub fn image_path(id: &str) -> Option<PathBuf> {
     images_dir().map(|d| d.join(format!("{id}.png")))
 }
+
+/// Trial + license state for the paid (non-App-Store) build.
+#[cfg_attr(not(feature = "license"), allow(dead_code))]
+pub fn license_file() -> Option<PathBuf> {
+    data_dir().map(|d| d.join("license.json"))
+}

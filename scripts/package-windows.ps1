@@ -6,7 +6,9 @@
 # Optionally signs with signtool if $env:WIN_CERT_PFX + $env:WIN_CERT_PASS
 # are set (your own code-signing certificate).
 #
-# Output: dist/klipa-<version>-windows-x64-setup.exe
+# Output:
+#   dist/klipa-<version>-windows-x64-setup.exe   (NSIS installer; winget)
+#   dist/klipa-<version>-windows-x64.zip         (portable klipa.exe; Scoop)
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
 Set-Location $root
@@ -36,3 +38,9 @@ if ($env:WIN_CERT_PFX) {
     /tr http://timestamp.digicert.com /td SHA256 $setup
 }
 Write-Host "Built $setup"
+
+# Portable zip (just the signed exe) for Scoop / manual use.
+$zip = "dist\klipa-$version-windows-x64.zip"
+if (Test-Path $zip) { Remove-Item $zip }
+Compress-Archive -Path "dist\klipa.exe" -DestinationPath $zip
+Write-Host "Built $zip"

@@ -5,11 +5,15 @@
 //! to the clipboard. No window, no GPU, no renderer - hence tiny.
 
 use crate::adapters::clipboard::{decode_png, read_image_png};
+use crate::awake::AwakeView;
+use crate::license::Gate;
 use klipa_core::{HistoryItem, ItemKind};
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::time::Duration;
 use tray_icon::menu::{
-    Icon as MenuIcon, IconMenuItem, Menu, MenuEvent, MenuId, MenuItem, PredefinedMenuItem,
+    CheckMenuItem, Icon as MenuIcon, IconMenuItem, Menu, MenuEvent, MenuId, MenuItem,
+    PredefinedMenuItem, Submenu,
 };
 use tray_icon::{Icon, TrayIcon, TrayIconBuilder};
 
@@ -17,9 +21,38 @@ use tray_icon::{Icon, TrayIcon, TrayIconBuilder};
 /// Big enough to recognise the image at a glance, no hover needed.
 const THUMB: usize = 64;
 
-/// Stable ids for the two fixed actions at the bottom of the menu.
+/// Stable ids for the fixed actions in the menu.
 pub const CLEAR_ID: &str = "__klipa_clear";
 pub const QUIT_ID: &str = "__klipa_quit";
+/// Keep-awake actions.
+pub const AWAKE_END_ID: &str = "__klipa_awake_end";
+pub const AWAKE_DISPLAY_ID: &str = "__klipa_awake_display";
+/// Prefix for "start a session of N seconds" items; 0 = indefinitely.
+pub const AWAKE_START_PREFIX: &str = "__klipa_awake_start:";
+/// Hide the menubar icon for this session.
+pub const HIDE_ICON_ID: &str = "__klipa_hide_icon";
+/// Open the purchase page / activate a license key.
+pub const BUY_ID: &str = "__klipa_buy";
+pub const ACTIVATE_ID: &str = "__klipa_activate";
+
+/// Keep-awake session presets shown in the submenu: (label, duration).
+/// `None` is an indefinite session.
+const AWAKE_PRESETS: &[(&str, Option<Duration>)] = &[
+    ("Indefinitely", None),
+    ("5 minutes", Some(Duration::from_secs(5 * 60))),
+    ("15 minutes", Some(Duration::from_secs(15 * 60))),
+    ("30 minutes", Some(Duration::from_secs(30 * 60))),
+    ("1 hour", Some(Duration::from_secs(60 * 60))),
+    ("2 hours", Some(Duration::from_secs(2 * 60 * 60))),
+    ("5 hours", Some(Duration::from_secs(5 * 60 * 60))),
+];
+
+/// Parse the seconds payload of an `AWAKE_START_PREFIX` menu id into a
+/// session duration (`None` == indefinitely).
+pub fn parse_awake_start(id: &str) -> Option<Option<Duration>> {
+    let secs: u64 = id.strip_prefix(AWAKE_START_PREFIX)?.parse().ok()?;
+    Some((secs > 0).then(|| Duration::from_secs(secs)))
+}
 
 /// How many recent entries to show in the dropdown (native menus get
 /// unwieldy beyond this; older items stay in history/the file).
@@ -49,8 +82,30 @@ impl Tray {
         }
     }
 
-    /// Rebuild the dropdown from the current history snapshot.
-    pub fn set_history(&self, items: &[HistoryItem]) {
+    /// Show or hide the menubar icon. Hiding it leaves klipa running
+    /// (and still watching the clipboard) with no visible UI; relaunch
+    /// klipa to bring the icon back.
+    pub fn set_visible(&self, visible: bool) {
+        let _ = self.icon.set_visible(visible);
+    }
+
+    /// Rebuild the dropdown from the current history snapshot, the
+    /// keep-awake session state, and the license gate. `notice` is an
+    /// optional transient status line (e.g. activation feedback).
+    pub fn set_menu(
+        &self,
+        items: &[HistoryItem],
+        awake: &AwakeView,
+        gate: &Gate,
+        price: &str,
+        notice: Option<&str>,
+    ) {
+        // Trial elapsed and unlicensed: show only the paywall.
+        if gate.is_locked() {
+            self.icon.set_menu(Some(Box::new(paywall_menu(price, notice))));
+            return;
+        }
+
         let menu = Menu::new();
         if items.is_empty() {
             let _ = menu.append(&MenuItem::new("No clipboard history yet", false, None));
@@ -71,6 +126,38 @@ impl Tray {
         }
         let _ = menu.append(&PredefinedMenuItem::separator());
         let _ = menu.append(&MenuItem::with_id(CLEAR_ID, "Clear history", !items.is_empty(), None));
+
+        let _ = menu.append(&PredefinedMenuItem::separator());
+        let _ = menu.append(&build_awake_submenu(awake));
+
+        // During the trial, surface the days left + unlock/activate.
+        if let Gate::Trial { days_left } = gate {
+            let _ = menu.append(&PredefinedMenuItem::separator());
+            let plural = if *days_left == 1 { "day" } else { "days" };
+            let _ = menu.append(&MenuItem::new(
+                format!("Free trial: {days_left} {plural} left"),
+                false,
+                None,
+            ));
+            let _ = menu.append(&MenuItem::with_id(
+                BUY_ID,
+                format!("Unlock full version - {price}"),
+                true,
+                None,
+            ));
+            let _ = menu.append(&MenuItem::with_id(
+                ACTIVATE_ID,
+                "Activate (paste license key)",
+                true,
+                None,
+            ));
+            if let Some(msg) = notice {
+                let _ = menu.append(&MenuItem::new(msg, false, None));
+            }
+        }
+
+        let _ = menu.append(&PredefinedMenuItem::separator());
+        let _ = menu.append(&MenuItem::with_id(HIDE_ICON_ID, "Hide menubar icon", true, None));
         let _ = menu.append(&MenuItem::with_id(QUIT_ID, "Quit klipa", true, None));
         self.icon.set_menu(Some(Box::new(menu)));
     }
@@ -97,6 +184,66 @@ impl Tray {
         let (rgba, w, h) = cache.get(reference)?;
         MenuIcon::from_rgba(rgba.clone(), *w, *h).ok()
     }
+}
+
+/// The locked-state menu: trial over, history hidden, unlock + activate.
+fn paywall_menu(price: &str, notice: Option<&str>) -> Menu {
+    let menu = Menu::new();
+    let _ = menu.append(&MenuItem::new("klipa - free trial ended", false, None));
+    let _ = menu.append(&PredefinedMenuItem::separator());
+    let _ = menu.append(&MenuItem::with_id(
+        BUY_ID,
+        format!("Unlock full version - {price}"),
+        true,
+        None,
+    ));
+    let _ = menu.append(&MenuItem::with_id(
+        ACTIVATE_ID,
+        "Activate (paste license key)",
+        true,
+        None,
+    ));
+    if let Some(msg) = notice {
+        let _ = menu.append(&MenuItem::new(msg, false, None));
+    }
+    let _ = menu.append(&PredefinedMenuItem::separator());
+    let _ = menu.append(&MenuItem::with_id(HIDE_ICON_ID, "Hide menubar icon", true, None));
+    let _ = menu.append(&MenuItem::with_id(QUIT_ID, "Quit klipa", true, None));
+    menu
+}
+
+/// Build the "Keep awake" submenu: a status line when active, the
+/// duration presets, the display-sleep toggle, and an end action.
+fn build_awake_submenu(awake: &AwakeView) -> Submenu {
+    let title = if awake.active { "Keep awake \u{25cf}" } else { "Keep awake" };
+    let sub = Submenu::new(title, true);
+
+    if let Some(status) = &awake.status {
+        let _ = sub.append(&MenuItem::new(status, false, None));
+        let _ = sub.append(&PredefinedMenuItem::separator());
+    }
+
+    for (label, dur) in AWAKE_PRESETS {
+        let secs = dur.map(|d| d.as_secs()).unwrap_or(0);
+        let id = format!("{AWAKE_START_PREFIX}{secs}");
+        let _ = sub.append(&MenuItem::with_id(id, *label, true, None));
+    }
+
+    let _ = sub.append(&PredefinedMenuItem::separator());
+    let _ = sub.append(&CheckMenuItem::with_id(
+        AWAKE_DISPLAY_ID,
+        "Allow display sleep",
+        true,
+        awake.allow_display_sleep,
+        None,
+    ));
+    let _ = sub.append(&MenuItem::with_id(
+        AWAKE_END_ID,
+        "End current session",
+        awake.active,
+        None,
+    ));
+    sub
 }
 
 /// Nearest-neighbour fit of `rgba` into a `size`x`size` transparent

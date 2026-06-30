@@ -27,6 +27,10 @@ jobs:
       DEVELOPER_ID_CERTS_P12_BASE64: ${{ secrets.DEVELOPER_ID_CERTS_P12_BASE64 }}
       CERTS_P12_PASSWORD: ${{ secrets.CERTS_P12_PASSWORD }}
       KEYCHAIN_PASSWORD: ${{ secrets.CI_KEYCHAIN_PASSWORD }}
+      # Baked into the binary at compile time for the license gate (both
+      # optional; unset = default purchase URL + keys can't be verified).
+      KLIPA_GUMROAD_PRODUCT_ID: ${{ vars.KLIPA_GUMROAD_PRODUCT_ID }}
+      KLIPA_PURCHASE_URL: ${{ vars.KLIPA_PURCHASE_URL }}
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -75,6 +79,9 @@ jobs:
   # ────────────────────────────── Windows ───────────────────────────────
   windows:
     runs-on: windows-latest
+    env:
+      KLIPA_GUMROAD_PRODUCT_ID: ${{ vars.KLIPA_GUMROAD_PRODUCT_ID }}
+      KLIPA_PURCHASE_URL: ${{ vars.KLIPA_PURCHASE_URL }}
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -91,11 +98,16 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: windows
-          path: dist/*-setup.exe
+          path: |
+            dist/*-setup.exe
+            dist/*-windows-x64.zip
 
   # ─────────────────────────────── Linux ────────────────────────────────
   linux:
     runs-on: ubuntu-latest
+    env:
+      KLIPA_GUMROAD_PRODUCT_ID: ${{ vars.KLIPA_GUMROAD_PRODUCT_ID }}
+      KLIPA_PURCHASE_URL: ${{ vars.KLIPA_PURCHASE_URL }}
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -149,3 +161,56 @@ jobs:
             || gh release create "$TAG" --repo "$GITHUB_REPOSITORY" \
                  --title "klipa $TAG" --generate-notes
           gh release upload "$TAG" out/* --repo "$GITHUB_REPOSITORY" --clobber
+
+  # ─────────────────── Package-manager manifests ────────────────────────
+  # Refresh the self-hosted Homebrew cask + Scoop bucket (and the winget /
+  # AUR manifests) to the new version + checksums, then commit to main.
+  # The repo doubles as the brew tap and scoop bucket, so this is all that
+  # is needed for `brew`/`scoop` users to get the update. winget + AUR
+  # still need a manual submit (see packaging/README.md).
+  managers:
+    needs: [release]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Bump manifests from the release checksums
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          # The release job published SHA256SUMS.txt as a release asset.
+          ./scripts/update-package-managers.sh "$VERSION" \
+            "https://github.com/$GITHUB_REPOSITORY/releases/download/v$VERSION/SHA256SUMS.txt"
+      - name: Commit + push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if git diff --quiet; then
+            echo "manifests already current"
+          else
+            git add Casks bucket packaging/winget packaging/aur
+            git commit -m "Update package-manager manifests for ${GITHUB_REF_NAME}"
+            git push origin main
+          fi
+
+  # ───────────────────────────── winget ─────────────────────────────────
+  # Open a PR to microsoft/winget-pkgs with the new version. Runs only
+  # when WINGET_TOKEN is set (a classic PAT that can push to your fork of
+  # winget-pkgs). The FIRST-EVER submission must be done manually - see
+  # packaging/README.md - after that this keeps it updated automatically.
+  winget:
+    needs: [release]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    env:
+      WINGET_TOKEN: ${{ secrets.WINGET_TOKEN }}
+    steps:
+      - name: Submit update to winget-pkgs
+        if: ${{ env.WINGET_TOKEN != '' }}
+        uses: vedantmgoyal9/winget-releaser@v2
+        with:
+          identifier: dev.peterdsp.klipa
+          release-tag: ${{ github.ref_name }}
+          installers-regex: '-windows-x64-setup\.exe$'
+          token: ${{ secrets.WINGET_TOKEN }}
