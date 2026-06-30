@@ -141,21 +141,43 @@ The `.deb`/`.rpm` payloads are defined under `[package.metadata.deb]` and
 
    | Secret | Used for |
    |---|---|
-   | `MAC_CERT_P12`, `MAC_CERT_PASSWORD` | base64 of a `.p12` holding your Developer ID certs + key |
-   | `DEV_ID_APP`, `DEV_ID_INST` | Developer ID identity names |
-   | `AC_APPLE_ID`, `AC_TEAM_ID`, `AC_PASSWORD` | notarization |
-   | `MAS_APP`, `MAS_INST`, `TEAMID` | Mac App Store `.pkg` |
+   | `DEVELOPER_ID_CERTS_P12_BASE64`, `CERTS_P12_PASSWORD` | base64 of a `.p12` holding your Developer ID Application + Installer certs (direct-download `.pkg`) |
+   | `CI_KEYCHAIN_PASSWORD` | password for the temporary CI keychain |
+   | `AC_APPLE_ID`, `AC_TEAM_ID`, `AC_PASSWORD` | notarization of the direct-download `.pkg` |
+   | `WINGET_TOKEN` | PAT to auto-submit winget updates (see above) |
+
+   > Notarization only happens when a Developer ID **signed** pkg was
+   > produced (i.e. the cert secrets are set). With no signing cert the
+   > job ships an **unsigned** pkg and skips notarization.
+
+   For the **Mac App Store** upload job (`mas`), add:
+
+   | Secret | Used for |
+   |---|---|
+   | `MAS_CERTS_P12_BASE64`, `MAS_CERTS_P12_PASSWORD` | base64 of a `.p12` with **Apple Distribution** + **3rd Party Mac Developer Installer** certs |
+   | `MAS_PROVISION_PROFILE_BASE64` | base64 of the App Store `.provisionprofile` |
+   | `TEAMID` | your 10-char Apple Team ID |
+   | `ASC_KEY_ID`, `ASC_ISSUER_ID`, `ASC_API_KEY_P8_BASE64` | App Store Connect **API key** (ASC -> Users and Access -> Integrations -> Keys) for upload |
+
+   > The `mas` job builds the sandboxed App Store pkg and uploads it via
+   > `xcrun altool`. It is skipped unless `MAS_CERTS_P12_BASE64` **and**
+   > `ASC_API_KEY_P8_BASE64` are set, and it requires the **app record to
+   > already exist** in App Store Connect (bundle id `dev.peterdsp.klipa`).
+   > The App Store pkg is uploaded straight to ASC - it is *not* attached
+   > to the public GitHub Release.
 
 2. Tag and push:
 
    ```bash
-   git tag v0.1.0
-   git push origin v0.1.0
+   git tag v0.2.0
+   git push origin v0.2.0
    ```
 
 3. The workflow builds macOS, Windows, and Linux installers, writes
    `SHA256SUMS.txt`, and publishes a GitHub Release. The website at
    <https://klipa.peterdsp.dev> picks up the new assets automatically.
+   If the MAS secrets are present, the `mas` job also uploads the App
+   Store build to App Store Connect (then submit it for review there).
 
 4. The `managers` job then refreshes the Homebrew cask + Scoop manifest
    to the new version/checksums and commits them back to `main`, so

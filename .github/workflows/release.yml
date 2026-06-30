@@ -136,6 +136,84 @@ jobs:
             dist/*.rpm
             dist/*.AppImage
 
+  # ───────────────────────── Mac App Store ──────────────────────────────
+  # Build the sandboxed App Store .pkg and upload it to App Store Connect.
+  # Independent of the direct-download macos job and NOT part of the public
+  # GitHub Release (App Store pkgs only work via the store). Runs only when
+  # the MAS + App Store Connect API secrets are present; otherwise skipped,
+  # so the rest of the release is unaffected. Requires the app record to
+  # already exist in App Store Connect (bundle id dev.peterdsp.klipa).
+  mas:
+    runs-on: macos-14
+    env:
+      # .p12 holding "Apple Distribution" + "3rd Party Mac Developer
+      # Installer" identities, exported together.
+      MAS_CERTS_P12_BASE64: ${{ secrets.MAS_CERTS_P12_BASE64 }}
+      MAS_CERTS_P12_PASSWORD: ${{ secrets.MAS_CERTS_P12_PASSWORD }}
+      KEYCHAIN_PASSWORD: ${{ secrets.CI_KEYCHAIN_PASSWORD }}
+      # base64 of the App Store provisioning profile (.provisionprofile).
+      MAS_PROVISION_PROFILE_BASE64: ${{ secrets.MAS_PROVISION_PROFILE_BASE64 }}
+      TEAMID: ${{ secrets.TEAMID }}
+      # App Store Connect API key for upload (Keys tab in ASC -> Users and
+      # Access). ASC_API_KEY_P8_BASE64 is the base64 of the AuthKey_*.p8.
+      ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+      ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+      ASC_API_KEY_P8_BASE64: ${{ secrets.ASC_API_KEY_P8_BASE64 }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-apple-darwin,aarch64-apple-darwin
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build + upload to App Store Connect
+        if: ${{ env.MAS_CERTS_P12_BASE64 != '' && env.ASC_API_KEY_P8_BASE64 != '' }}
+        run: |
+          set -euo pipefail
+
+          # 1. Import the App Store signing certs into a temp keychain.
+          KEYCHAIN_PATH="$RUNNER_TEMP/mas.keychain-db"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          echo "$MAS_CERTS_P12_BASE64" | base64 -d > "$RUNNER_TEMP/mas-certs.p12"
+          security import "$RUNNER_TEMP/mas-certs.p12" -k "$KEYCHAIN_PATH" -P "$MAS_CERTS_P12_PASSWORD" \
+            -T /usr/bin/codesign -T /usr/bin/productbuild -T /usr/bin/security
+          security list-keychains -d user -s "$KEYCHAIN_PATH" $(security list-keychains -d user | tr -d '"')
+          security default-keychain -s "$KEYCHAIN_PATH"
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          rm -f "$RUNNER_TEMP/mas-certs.p12"
+
+          # 2. Resolve the signing identity names from the keychain.
+          export MAS_APP=$(security find-identity -v "$KEYCHAIN_PATH" | grep "Apple Distribution" | head -1 | sed -E 's/^[^"]*"([^"]+)".*/\1/')
+          export MAS_INST=$(security find-identity -v "$KEYCHAIN_PATH" | grep "3rd Party Mac Developer Installer" | head -1 | sed -E 's/^[^"]*"([^"]+)".*/\1/')
+          echo "Signing as: $MAS_APP | $MAS_INST"
+
+          # 3. Embed the provisioning profile (if provided).
+          if [ -n "${MAS_PROVISION_PROFILE_BASE64:-}" ]; then
+            echo "$MAS_PROVISION_PROFILE_BASE64" | base64 -d > "$RUNNER_TEMP/klipa.provisionprofile"
+            export PROFILE="$RUNNER_TEMP/klipa.provisionprofile"
+          fi
+
+          # 4. Build the App Store pkg (sandboxed; license feature off).
+          ./scripts/package-mas.sh
+
+          # 5. App Store Connect API key for upload.
+          mkdir -p "$HOME/.appstoreconnect/private_keys"
+          echo "$ASC_API_KEY_P8_BASE64" | base64 -d > "$HOME/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8"
+
+          # 6. Validate, then upload to App Store Connect.
+          PKG=$(ls dist/klipa-*-mas.pkg)
+          xcrun altool --validate-app -f "$PKG" -t macos \
+            --apiKey "$ASC_KEY_ID" --apiIssuer "$ASC_ISSUER_ID"
+          xcrun altool --upload-app -f "$PKG" -t macos \
+            --apiKey "$ASC_KEY_ID" --apiIssuer "$ASC_ISSUER_ID"
+          echo "Uploaded $PKG to App Store Connect."
+
+      - name: Notice (MAS secrets not set)
+        if: ${{ env.MAS_CERTS_P12_BASE64 == '' || env.ASC_API_KEY_P8_BASE64 == '' }}
+        run: echo "MAS / App Store Connect secrets not set - skipping App Store build + upload."
+
   # ───────────────────────────── Publish ────────────────────────────────
   release:
     needs: [macos, windows, linux]
