@@ -1,0 +1,8 @@
+# winget version manifest. Submit the three files in this folder to
+# microsoft/winget-pkgs (see packaging/README.md). Version + sha are
+# refreshed by scripts/update-package-managers.sh.
+PackageIdentifier: dev.peterdsp.klipa
+PackageVersion: 0.1.0
+DefaultLocale: en-US
+ManifestType: version
+ManifestVersion: 1.6.0

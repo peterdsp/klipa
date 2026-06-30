@@ -1,0 +1,25 @@
+# Maintainer: Petros Dhespollari <info@peterdsp.dev>
+# AUR binary package: installs the prebuilt klipa from the GitHub release
+# tarball. Publish to aur.archlinux.org/klipa-bin.git (see packaging/README.md).
+# pkgver + sha256sums are refreshed by scripts/update-package-managers.sh.
+pkgname=klipa-bin
+_pkgname=klipa
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="Small, fast, menubar clipboard manager with keep-awake"
+arch=('x86_64')
+url="https://klipa.peterdsp.dev"
+license=('MIT')
+provides=('klipa')
+conflicts=('klipa')
+depends=('gtk3' 'libxdo' 'libayatana-appindicator')
+source=("$_pkgname-$pkgver.tar.gz::https://github.com/peterdsp/klipa/releases/download/v$pkgver/klipa-$pkgver-linux-x86_64.tar.gz")
+sha256sums=('0000000000000000000000000000000000000000000000000000000000000000')
+
+package() {
+  cd "$srcdir/$_pkgname"
+  install -Dm755 "usr/bin/$_pkgname" "$pkgdir/usr/bin/$_pkgname"
+  install -Dm644 "usr/share/applications/$_pkgname.desktop" \
+    "$pkgdir/usr/share/applications/$_pkgname.desktop"
+  cp -a usr/share/icons "$pkgdir/usr/share/icons"
+}

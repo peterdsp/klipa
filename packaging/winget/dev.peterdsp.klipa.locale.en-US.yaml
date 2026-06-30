@@ -1,0 +1,23 @@
+PackageIdentifier: dev.peterdsp.klipa
+PackageVersion: 0.1.0
+PackageLocale: en-US
+Publisher: Petros Dhespollari
+PublisherUrl: https://peterdsp.dev
+PackageName: klipa
+PackageUrl: https://klipa.peterdsp.dev
+License: MIT
+LicenseUrl: https://github.com/peterdsp/klipa/blob/main/LICENSE
+ShortDescription: Small, fast, menubar clipboard manager with keep-awake
+Description: >-
+  klipa is a small, fast clipboard manager that lives in the system tray.
+  Pure Rust, no system WebView, no JavaScript runtime. It also offers
+  Amphetamine-style keep-awake sessions.
+Tags:
+  - clipboard
+  - clipboard-manager
+  - menubar
+  - tray
+  - productivity
+  - rust
+ManifestType: defaultLocale
+ManifestVersion: 1.6.0

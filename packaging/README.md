@@ -10,8 +10,15 @@ packaging/
 ├── icons/        generated .icns / .ico / hicolor PNGs  (make-icons.sh)
 ├── macos/        Info.plist + entitlements (Developer ID + App Store)
 ├── windows/      NSIS installer script (klipa.nsi)
+├── winget/       winget manifests (submit to microsoft/winget-pkgs)
+├── aur/          AUR PKGBUILD + .SRCINFO (publish to aur.archlinux.org)
 └── linux/        klipa.desktop  (+ deb/rpm metadata in crates/klipa-ui/Cargo.toml)
 ```
+
+The Homebrew cask ([`../Casks/klipa.rb`](../Casks/klipa.rb)) and Scoop
+manifest ([`../bucket/klipa.json`](../bucket/klipa.json)) live at the repo
+root so **this repository doubles as the Homebrew tap and the Scoop
+bucket** - no second repo to maintain. See *Package managers* below.
 
 Icons are committed, but regenerate any time `assets/icon.svg` changes:
 
@@ -149,3 +156,100 @@ The `.deb`/`.rpm` payloads are defined under `[package.metadata.deb]` and
 3. The workflow builds macOS, Windows, and Linux installers, writes
    `SHA256SUMS.txt`, and publishes a GitHub Release. The website at
    <https://klipa.peterdsp.dev> picks up the new assets automatically.
+
+4. The `managers` job then refreshes the Homebrew cask + Scoop manifest
+   to the new version/checksums and commits them back to `main`, so
+   `brew`/`scoop` users get the update with no extra work.
+
+---
+
+## Package managers
+
+End-user install commands are in the [top-level README](../README.md#package-managers-cli).
+This section is the **maintainer** side.
+
+| Manager | Manifest | Hosting | Refresh |
+|---|---|---|---|
+| Homebrew (cask) | [`Casks/klipa.rb`](../Casks/klipa.rb) | this repo (tap) | auto (CI `managers` job) |
+| Scoop | [`bucket/klipa.json`](../bucket/klipa.json) | this repo (bucket) | auto (CI `managers` job) |
+| winget | [`winget/`](winget/) | microsoft/winget-pkgs | manual submit |
+| AUR | [`aur/`](aur/) | aur.archlinux.org | manual push |
+
+All five manifests are kept in sync by one script, which reads a
+release's `SHA256SUMS.txt` and rewrites the version + per-artifact
+checksum in each file:
+
+```bash
+# Defaults to the Cargo.toml version and that release's SHA256SUMS.txt.
+./scripts/update-package-managers.sh                 # current version
+./scripts/update-package-managers.sh 0.2.0           # explicit version
+./scripts/update-package-managers.sh 0.2.0 ./out/SHA256SUMS.txt   # local sums
+```
+
+CI runs this automatically for the **Homebrew + Scoop** manifests (they
+are served straight from this repo). **winget** and **AUR** live in
+external repos, so after a release run the script, then submit:
+
+**winget** - the **first** submission is manual with
+[`wingetcreate`](https://github.com/microsoft/winget-create) (winget needs
+an existing package before it can auto-update):
+
+```bash
+wingetcreate submit --token <gh-token> packaging/winget/
+# or open a PR against microsoft/winget-pkgs with the three YAML files.
+```
+
+After that first PR is merged, the release workflow's `winget` job keeps
+it updated automatically on every tag - set repo secret **`WINGET_TOKEN`**
+to a classic PAT (scope `public_repo`) on your fork of
+`microsoft/winget-pkgs`. Without the secret the job is skipped.
+
+**AUR** - push to the `klipa-bin` package repo (one-time `git clone
+ssh://aur@aur.archlinux.org/klipa-bin.git`):
+
+```bash
+cp packaging/aur/PKGBUILD packaging/aur/.SRCINFO /path/to/aur/klipa-bin/
+cd /path/to/aur/klipa-bin && git commit -am "klipa 0.2.0" && git push
+```
+
+> `.SRCINFO` must match `PKGBUILD`; regenerate it in a checkout with
+> `makepkg --printsrcinfo > .SRCINFO` if you hand-edit the PKGBUILD.
+
+---
+
+## Licensing / paywall (non-App-Store builds)
+
+The paid gate lives in [`../crates/klipa-ui/src/license.rs`](../crates/klipa-ui/src/license.rs)
+behind the `license` cargo feature (on by default, **off** for the Mac App
+Store build via `--no-default-features --features mas`). It is a 7-day
+free trial, then a one-time **€1.99** unlock verified against a store's
+license-key API (Gumroad by default).
+
+Two **build-time** settings are baked into the binary via `option_env!`,
+so set them in the environment when CI compiles the release (they are not
+secret - the product id is used client-side anyway):
+
+| Repo variable | Meaning | Default if unset |
+|---|---|---|
+| `KLIPA_GUMROAD_PRODUCT_ID` | Gumroad product id used to verify keys | empty -> keys can't be verified (trial still works) |
+| `KLIPA_PURCHASE_URL` | where *Unlock* sends the buyer | `https://klipa.peterdsp.dev/buy` |
+
+Set them as GitHub **Actions variables** (Settings -> Secrets and
+variables -> Actions -> *Variables*); the macOS / Windows / Linux build
+jobs already read them.
+
+**Store setup (Gumroad):** create a €1.99 product, enable *"Generate a
+unique license key per sale"*, and copy its product id into
+`KLIPA_GUMROAD_PRODUCT_ID`. Buyers get a key, paste it into klipa, and the
+app calls `api.gumroad.com/v2/licenses/verify`. To use a different store
+(Lemon Squeezy, Polar, ...) swap the single `verify_key` function.
+
+To build a licensed binary locally for testing:
+
+```bash
+KLIPA_GUMROAD_PRODUCT_ID=your_id cargo build --release    # license on
+cargo build --release --no-default-features --features mas # App Store: no gate
+```
+
+The trial state lives in `license.json` in the user's data dir; deleting
+it restarts the trial (expected - this is a nudge, not DRM).

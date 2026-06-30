@@ -13,11 +13,15 @@ name = "klipa"
 path = "src/main.rs"
 
 [features]
-default = ["frontmost"]
+default = ["frontmost", "license"]
 # Capture the frontmost app name when an item is copied. Uses
 # active-win-pos-rs (CGWindowList / accessibility). Disabled for the
 # Mac App Store build, where the sandbox forbids it.
 frontmost = ["dep:active-win-pos-rs"]
+# Paid-version gate: a 7-day free trial then a €1.99 unlock, with online
+# license-key verification. Pulls in a tiny HTTPS client (ureq + rustls).
+# Disabled for the Mac App Store build, where the store handles payment.
+license = ["dep:ureq"]
 # Mac App Store target marker: build with
 #   cargo build --no-default-features --features mas
 mas = []
@@ -39,7 +43,9 @@ arboard = "3"
 # Capture images (screenshots) too; store them PNG-compressed.
 png = "0.17"
 base64 = "0.22"
-time = { version = "0.3", features = ["serde"] }
+# serde-well-known enables the rfc3339 (de)serializer used for the
+# trial/license timestamps.
+time = { version = "0.3", features = ["serde-well-known"] }
 uuid = { version = "1", features = ["v4", "serde"] }
 directories = "5"
 # Native tray icon + dropdown menu (the entire UI), cross-platform.
@@ -48,6 +54,9 @@ tray-icon = "0.24"
 # No window/renderer is created, so none of the GPU stack is pulled in.
 winit = "0.30"
 active-win-pos-rs = { version = "0.9", optional = true }
+# Tiny blocking HTTPS client for one-shot license-key verification
+# (rustls, no OpenSSL). Only pulled in with the `license` feature.
+ureq = { version = "2", features = ["json"], optional = true }
 
 # macOS-only: convert the process to a menubar accessory app
 # (no dock icon, no main menu) by calling

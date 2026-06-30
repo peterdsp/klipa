@@ -10,6 +10,8 @@
 #![cfg_attr(all(target_os = "windows", not(debug_assertions)), windows_subsystem = "windows")]
 
 mod adapters;
+mod awake;
+mod license;
 mod paths;
 mod platform;
 mod tray;
@@ -36,13 +38,32 @@ struct Klipa {
     /// Set by the clipboard watcher when new history lands.
     dirty: Arc<AtomicBool>,
     tray: Option<tray::Tray>,
+    /// Amphetamine-style keep-awake session manager.
+    awake: awake::KeepAwake,
+    /// Last time the keep-awake countdown label was refreshed.
+    awake_refreshed: Instant,
+    /// Trial + license gate (no-op in the App Store build).
+    license: license::License,
+    /// Mirrors the locked state so the watcher can stop recording.
+    locked: Arc<AtomicBool>,
+    /// Last time the trial/license state was reflected in the menu.
+    license_refreshed: Instant,
 }
 
 impl Klipa {
-    fn rebuild_menu(&self) {
+    fn rebuild_menu(&mut self) {
         if let Some(tray) = &self.tray {
             let items = self.rt.block_on(self.history.snapshot());
-            tray.set_history(&items);
+            let gate = self.license.gate();
+            self.locked.store(gate.is_locked(), Ordering::Release);
+            let notice = self.license.transient_message();
+            tray.set_menu(
+                &items,
+                &self.awake.view(),
+                &gate,
+                license::License::price(),
+                notice.as_deref(),
+            );
         }
     }
 }
@@ -73,6 +94,32 @@ impl ApplicationHandler for Klipa {
                     let _ = self.rt.block_on(self.history.clear_unpinned());
                     self.rebuild_menu();
                 }
+                tray::HIDE_ICON_ID => {
+                    if let Some(tray) = &self.tray {
+                        tray.set_visible(false);
+                    }
+                }
+                tray::BUY_ID => {
+                    self.license.open_purchase();
+                }
+                tray::ACTIVATE_ID => {
+                    self.license.activate_from_clipboard();
+                    self.rebuild_menu();
+                }
+                tray::AWAKE_END_ID => {
+                    self.awake.end();
+                    self.rebuild_menu();
+                }
+                tray::AWAKE_DISPLAY_ID => {
+                    let next = !self.awake.allow_display_sleep();
+                    self.awake.set_allow_display_sleep(next);
+                    self.rebuild_menu();
+                }
+                other if tray::parse_awake_start(other).is_some() => {
+                    let dur = tray::parse_awake_start(other).unwrap();
+                    self.awake.start(dur);
+                    self.rebuild_menu();
+                }
                 other => {
                     if let Ok(uuid) = uuid::Uuid::parse_str(other) {
                         if let Err(e) = self
@@ -86,7 +133,26 @@ impl ApplicationHandler for Klipa {
             }
         }
 
+        // Reap a keep-awake session whose timer elapsed, and otherwise
+        // keep the "X left" countdown label roughly fresh by rebuilding
+        // about once a minute while a session is running.
+        let awake_ended = self.awake.poll();
+        let awake_stale = self.awake.view().active
+            && self.awake_refreshed.elapsed() >= Duration::from_secs(60);
+        if awake_ended || awake_stale {
+            self.awake_refreshed = Instant::now();
+            self.rebuild_menu();
+        }
+
         if self.dirty.swap(false, Ordering::AcqRel) {
+            self.rebuild_menu();
+        }
+
+        // Periodically reflect the trial clock: the countdown ticks down,
+        // and the menu flips to the paywall the moment the trial lapses
+        // (and clears any expired activation notice).
+        if self.license_refreshed.elapsed() >= Duration::from_secs(20) {
+            self.license_refreshed = Instant::now();
             self.rebuild_menu();
         }
 
@@ -117,13 +183,21 @@ fn main() {
         svc
     });
 
+    // Trial + license gate. Stamps the trial clock on first run, and
+    // re-checks an activated key in the background if it's gone stale.
+    let mut license = license::License::load();
+    license.reverify_if_stale();
+    let locked = Arc::new(AtomicBool::new(license.gate().is_locked()));
+
     // Clipboard watcher: flips `dirty` so the loop refreshes the menu.
+    // It stops recording while `locked` is set (trial lapsed).
     let dirty = Arc::new(AtomicBool::new(false));
     {
         let svc = history.clone();
         let d = dirty.clone();
+        let lk = locked.clone();
         handle.spawn(async move {
-            adapters::watcher::run(svc, move || d.store(true, Ordering::Release)).await;
+            adapters::watcher::run(svc, lk, move || d.store(true, Ordering::Release)).await;
         });
     }
 
@@ -134,6 +208,11 @@ fn main() {
         rt: handle,
         dirty,
         tray: None,
+        awake: awake::KeepAwake::new(),
+        awake_refreshed: Instant::now(),
+        license,
+        locked,
+        license_refreshed: Instant::now(),
     };
     if let Err(e) = event_loop.run_app(&mut app) {
         tracing::error!(?e, "event loop exited with error");
