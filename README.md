@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="packaging/icons/klipa.png" alt="klipa" width="160" height="160" />
+</p>
+
 # klipa
 
 > A small, fast, cross-platform clipboard manager.
@@ -172,7 +176,7 @@ Per-platform installers are produced by the scripts in [`scripts/`](scripts/)
 and, on a `v*` git tag, by the [release workflow](.github/workflows/release.yml):
 
 ```bash
-./scripts/make-icons.sh        # regenerate icons from assets/icon.svg
+./scripts/make-icons.sh        # regenerate icons from assets/icon.png
 ./scripts/package-macos.sh     # macOS Developer ID .pkg (+ notarize)
 ./scripts/package-mas.sh       # Mac App Store .pkg
 pwsh scripts/package-windows.ps1   # Windows .exe installer (NSIS)
