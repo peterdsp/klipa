@@ -46,7 +46,11 @@ else
   productbuild --package "$COMP" "$PKG"
 fi
 
-if [ -n "${AC_PROFILE:-}" ] || [ -n "${AC_APPLE_ID:-}" ]; then
+# Notarization only works on a Developer ID *signed* pkg. If the
+# installer is unsigned (no DEV_ID_INST), skip it - otherwise Apple
+# returns "Invalid" and the whole build fails. This keeps the
+# no-secrets path producing a usable (unsigned) pkg instead of erroring.
+if [ -n "${DEV_ID_INST:-}" ] && { [ -n "${AC_PROFILE:-}" ] || [ -n "${AC_APPLE_ID:-}" ]; }; then
   echo "==> notarizing"
   if [ -n "${AC_PROFILE:-}" ]; then
     xcrun notarytool submit "$PKG" --keychain-profile "$AC_PROFILE" --wait
@@ -55,6 +59,9 @@ if [ -n "${AC_PROFILE:-}" ] || [ -n "${AC_APPLE_ID:-}" ]; then
       --team-id "$AC_TEAM_ID" --password "$AC_PASSWORD" --wait
   fi
   xcrun stapler staple "$PKG"
+elif [ -n "${AC_PROFILE:-}" ] || [ -n "${AC_APPLE_ID:-}" ]; then
+  echo "!! notary credentials present but pkg is unsigned (no DEV_ID_INST)" >&2
+  echo "!! skipping notarization - shipping an UNSIGNED pkg." >&2
 fi
 
 echo "Built $PKG"
