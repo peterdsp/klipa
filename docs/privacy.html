@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>klipa - Privacy Policy</title>
+<meta name="description" content="klipa collects no personal data. Everything stays on your device." />
+<link rel="icon" type="image/png" href="assets/favicon.png" />
+<meta name="theme-color" content="#0e0f12" />
+<style>
+  :root{
+    --bg:#0e0f12; --card:rgba(255,255,255,.05);
+    --stroke:rgba(255,255,255,.10); --text:#eceef2; --muted:#9aa3af;
+    --accent2:#6ea8fe;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    color:var(--text);background:var(--bg);line-height:1.65;
+    background-image:radial-gradient(1100px 600px at 50% -10%,rgba(59,130,246,.15),transparent 60%);
+    -webkit-font-smoothing:antialiased;
+    padding:60px 22px 80px;
+  }
+  a{color:var(--accent2);text-decoration:none}
+  a:hover{text-decoration:underline}
+  .wrap{max-width:720px;margin:0 auto}
+  header{text-align:center;margin-bottom:48px}
+  .logo{width:88px;height:88px;filter:drop-shadow(0 12px 30px rgba(0,0,0,.5))}
+  h1{font-size:36px;letter-spacing:-.02em;margin:20px 0 4px}
+  .updated{color:var(--muted);font-size:14px}
+  h2{font-size:20px;letter-spacing:-.01em;margin:32px 0 10px}
+  p{color:#d5d8e0;margin-bottom:14px}
+  ul{margin:0 0 14px 24px;color:#d5d8e0}
+  li{margin-bottom:6px}
+  .card{
+    border:1px solid var(--stroke);background:var(--card);border-radius:14px;
+    padding:22px;margin-top:32px;backdrop-filter:blur(12px);
+  }
+  .kbd{
+    font:600 12px ui-monospace,SFMono-Regular,Menlo,monospace;
+    background:rgba(255,255,255,.08);border:1px solid var(--stroke);
+    border-radius:6px;padding:1px 6px;color:#eceef2;
+  }
+  footer{margin-top:60px;text-align:center;color:var(--muted);font-size:13px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <img class="logo" src="assets/icon.png" alt="klipa" />
+    <h1>Privacy Policy</h1>
+    <p class="updated">Last updated: 1 July 2026</p>
+  </header>
+
+  <p>klipa is a clipboard manager and keep-awake utility that runs on your
+  device. This privacy policy explains what information the app handles
+  and what it does not do. It is short because there is very little to
+  say.</p>
+
+  <div class="card">
+    <p style="margin-bottom:0"><strong>Short version.</strong>
+    klipa collects no personal data. Your clipboard history stays on
+    your device, in your own user data folder. Nothing is uploaded,
+    logged, synced, or sold. klipa has no servers, no analytics, no
+    ads, no accounts, and no tracking.</p>
+  </div>
+
+  <h2>Data stored on your device</h2>
+  <p>klipa keeps a local history of items you have copied to the
+  clipboard - text and images - so you can paste them back later. This
+  history is written to a single JSON file, plus per-image PNG files
+  for image entries, in your operating system's application data
+  directory:</p>
+  <ul>
+    <li>macOS: <span class="kbd">~/Library/Application&nbsp;Support/dev.peterdsp.klipa/</span></li>
+    <li>Windows: <span class="kbd">%APPDATA%\dev.peterdsp.klipa\</span></li>
+    <li>Linux: <span class="kbd">~/.local/share/dev.peterdsp.klipa/</span></li>
+  </ul>
+  <p>You can inspect, back up, or delete this folder at any time. The
+  in-app <em>Clear history</em> action empties it for you.</p>
+
+  <h2>What klipa never does</h2>
+  <ul>
+    <li>klipa never uploads your clipboard, or any part of it, to any
+    server operated by us or anyone else.</li>
+    <li>klipa never contains any analytics, telemetry, crash reporting,
+    or tracking SDKs.</li>
+    <li>klipa never shows ads.</li>
+    <li>klipa never asks you to create an account.</li>
+    <li>klipa never syncs between devices.</li>
+  </ul>
+
+  <h2>Optional network requests</h2>
+  <p>klipa is local-only by default. If you explicitly opt in to one of
+  the optional menu bar modes that show a temperature, the app makes
+  two kinds of anonymous, aggregate HTTP requests: one to
+  <a href="https://ip-api.com">ip-api.com</a> to look up an approximate
+  latitude and longitude from your IP address (cached for 24 hours),
+  and one to <a href="https://open-meteo.com">open-meteo.com</a> to
+  fetch the current temperature at those coordinates (cached for 10
+  minutes). These requests are made only while a temperature mode is
+  enabled and are not sent to us. The default menu bar mode makes no
+  network requests at all.</p>
+  <p>Outside of the Mac App Store, klipa also checks the GitHub
+  Releases API at most once a day to see if a newer version of klipa is
+  available. This lets it show an "Update available" item in the menu.
+  No information about you is sent in that request.</p>
+
+  <h2>License activation (non-App-Store builds only)</h2>
+  <p>The direct-download builds of klipa (macOS <span class="kbd">.pkg</span>,
+  Windows installer, Linux packages) include a paid unlock after a
+  7-day free trial. If you choose to activate a license key, klipa
+  sends the key you paste to <a href="https://gumroad.com">gumroad.com</a>
+  once, over HTTPS, to verify that it is valid. The result is cached
+  locally so no further requests are needed to keep the app unlocked.
+  The Mac App Store build does not include this feature at all.</p>
+
+  <h2>Payment</h2>
+  <p>On the Mac App Store, payment is handled entirely by Apple; klipa
+  never sees your payment details. For the direct-download builds,
+  payment is handled entirely by Gumroad, our merchant of record;
+  klipa never sees your payment details either.</p>
+
+  <h2>Children</h2>
+  <p>klipa is a general-purpose utility and does not knowingly collect
+  any information from anyone, of any age.</p>
+
+  <h2>Changes to this policy</h2>
+  <p>If this policy ever changes in any material way, the update will
+  be shown here with a new "Last updated" date. The source of this page
+  lives in the <a href="https://github.com/peterdsp/klipa">klipa
+  GitHub repository</a>, so every change is visible in the commit
+  history.</p>
+
+  <h2>Contact</h2>
+  <p>Questions or concerns about this policy or about how klipa
+  handles your data: <a href="mailto:info@peterdsp.dev">info@peterdsp.dev</a>.</p>
+
+  <footer>
+    &lt; <a href="index.html">back to klipa</a> &nbsp;·&nbsp;
+    <a href="https://github.com/peterdsp/klipa">source on GitHub</a>
+  </footer>
+</div>
+</body>
+</html>
