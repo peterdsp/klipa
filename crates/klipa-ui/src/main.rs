@@ -17,6 +17,7 @@ mod paths;
 mod platform;
 mod settings;
 mod tray;
+mod updater;
 mod weather;
 
 use adapters::{clipboard::ArboardClipboard, storage::JsonStore};
@@ -57,6 +58,9 @@ struct Klipa {
     weather: weather::WeatherState,
     /// Last time the menu bar title (date/temp) was refreshed.
     menubar_refreshed: Instant,
+    /// Once-a-day background check for a newer release (no-op in the
+    /// App Store build - MAS handles updates itself).
+    updater: updater::UpdateState,
 }
 
 impl Klipa {
@@ -66,6 +70,7 @@ impl Klipa {
             let gate = self.license.gate();
             self.locked.store(gate.is_locked(), Ordering::Release);
             let notice = self.license.transient_message();
+            let update = self.updater.menu_label();
             tray.set_menu(
                 &items,
                 &self.awake.view(),
@@ -73,6 +78,7 @@ impl Klipa {
                 license::License::price(),
                 notice.as_deref(),
                 self.settings.menubar_display,
+                update.as_deref(),
             );
         }
     }
@@ -141,6 +147,7 @@ impl ApplicationHandler for Klipa {
                 tray::MENUBAR_DATE_ID => self.set_menubar_display(settings::MenubarDisplay::Date),
                 tray::MENUBAR_TEMP_ID => self.set_menubar_display(settings::MenubarDisplay::Temperature),
                 tray::MENUBAR_BOTH_ID => self.set_menubar_display(settings::MenubarDisplay::Both),
+                tray::UPDATE_ID => self.updater.trigger(),
                 tray::AWAKE_END_ID => {
                     self.awake.end();
                     self.rebuild_menu();
@@ -196,6 +203,13 @@ impl ApplicationHandler for Klipa {
         // TTL from inside the WeatherState.
         if self.menubar_refreshed.elapsed() >= Duration::from_secs(60) {
             self.refresh_menubar_title();
+        }
+
+        // Rebuild the menu the moment the background updater posts a
+        // "new version available" result. Cheap: the check itself only
+        // fires once every 24 h from inside `tick`.
+        if self.updater.tick() {
+            self.rebuild_menu();
         }
 
         event_loop.set_control_flow(ControlFlow::WaitUntil(Instant::now() + TICK));
@@ -258,6 +272,7 @@ fn main() {
         settings: settings::Settings::load(),
         weather: weather::WeatherState::new(),
         menubar_refreshed: Instant::now(),
+        updater: updater::UpdateState::new(),
     };
     if let Err(e) = event_loop.run_app(&mut app) {
         tracing::error!(?e, "event loop exited with error");

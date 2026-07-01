@@ -156,6 +156,8 @@ klipa/
         ├── license.rs   7-day trial + €1.99 unlock (off in the App Store build)
         ├── settings.rs  persistent user prefs (menu bar display mode)
         ├── weather.rs   opt-in IP location + open-meteo temperature
+        ├── updater.rs   daily "new release" check (off in the App Store build)
+        ├── http.rs      curl subprocess (no bundled TLS or HTTP client)
         ├── platform.rs  macOS menubar-accessory tweak
         └── main.rs      composition root + winit event loop
 ```
@@ -179,6 +181,7 @@ Inner layers never import outer layers. `klipa-core` has zero of:
 - **Keep-awake sessions** - timed or indefinite, native on macOS / Windows / Linux
 - **Hide menubar icon** while klipa keeps running in the background
 - **Menu bar display**: icon only (default), date, temperature, or both
+- **Auto-update notice**: daily background check for a newer release; shows an "Update to vX.Y.Z" item in the menu (direct-download builds only - App Store handles its own updates)
 - **7-day free trial**, then a one-time **€1.99** unlock (App Store build excluded)
 - Frontmost-app capture per OS via `active-win-pos-rs`
 - macOS menubar accessory (no dock icon)
