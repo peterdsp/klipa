@@ -33,10 +33,34 @@ impl MenubarDisplay {
     }
 }
 
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+/// Maximum clipboard-history entries kept in memory + on disk.
+/// Legacy setting, but configurable so power users can bump it.
+pub const DEFAULT_HISTORY_CAP: usize = 200;
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Settings {
     #[serde(default)]
     pub menubar_display: MenubarDisplay,
+    /// Whether the first-launch welcome page has been shown.
+    #[serde(default)]
+    pub welcomed: bool,
+    /// How many clipboard entries to remember.
+    #[serde(default = "default_history_cap")]
+    pub history_cap: usize,
+}
+
+impl Default for Settings {
+    fn default() -> Self {
+        Self {
+            menubar_display: MenubarDisplay::default(),
+            welcomed: false,
+            history_cap: DEFAULT_HISTORY_CAP,
+        }
+    }
+}
+
+fn default_history_cap() -> usize {
+    DEFAULT_HISTORY_CAP
 }
 
 impl Settings {

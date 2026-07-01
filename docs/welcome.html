@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Welcome to klipa</title>
+<meta name="description" content="A 2-minute walkthrough of klipa: where the app lives, what the menu bar options do, and how the trial works." />
+<link rel="icon" type="image/png" href="assets/favicon.png" />
+<meta name="theme-color" content="#0e0f12" />
+<style>
+  :root{
+    --bg:#0e0f12; --card:rgba(255,255,255,.05);
+    --stroke:rgba(255,255,255,.10); --text:#eceef2; --muted:#9aa3af;
+    --accent:#3b82f6; --accent2:#6ea8fe;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    color:var(--text);background:var(--bg);line-height:1.65;
+    background-image:radial-gradient(1100px 600px at 50% -10%,rgba(59,130,246,.18),transparent 60%);
+    -webkit-font-smoothing:antialiased;padding:60px 22px 100px;
+  }
+  a{color:var(--accent2);text-decoration:none}
+  a:hover{text-decoration:underline}
+  .wrap{max-width:720px;margin:0 auto}
+  header{text-align:center;margin-bottom:44px}
+  .logo{width:96px;height:96px;filter:drop-shadow(0 12px 30px rgba(0,0,0,.5))}
+  h1{
+    font-size:clamp(32px,7vw,48px);letter-spacing:-.02em;margin:16px 0 6px;
+    background:linear-gradient(180deg,#ffffff 30%,#a9c3ff 100%);
+    -webkit-background-clip:text;background-clip:text;color:transparent;
+  }
+  .lead{color:var(--muted);font-size:17px}
+  .step{
+    border:1px solid var(--stroke);background:var(--card);border-radius:16px;
+    padding:24px 24px 20px;margin-top:20px;backdrop-filter:blur(12px);
+  }
+  .step .num{
+    display:inline-flex;align-items:center;justify-content:center;
+    width:26px;height:26px;border-radius:8px;
+    background:linear-gradient(180deg,var(--accent2),var(--accent));
+    color:#fff;font-weight:700;font-size:13px;margin-right:10px;
+    vertical-align:-4px;
+  }
+  h2{font-size:19px;letter-spacing:-.01em;display:inline}
+  .step p{color:#d5d8e0;margin:14px 0 0}
+  .step ul{margin:10px 0 0 22px;color:#d5d8e0}
+  .step li{margin-bottom:4px}
+  .kbd{
+    font:600 12px ui-monospace,SFMono-Regular,Menlo,monospace;
+    background:rgba(255,255,255,.08);border:1px solid var(--stroke);
+    border-radius:6px;padding:1px 6px;
+  }
+  .cta{
+    text-align:center;margin-top:44px;
+  }
+  .cta a{
+    display:inline-block;padding:14px 28px;border-radius:12px;
+    background:linear-gradient(180deg,var(--accent2),var(--accent));color:#fff;
+    font-weight:600;text-decoration:none;font-size:16px;
+    box-shadow:0 12px 30px rgba(59,130,246,.35);
+  }
+  .cta a:hover{filter:brightness(1.08)}
+  footer{text-align:center;color:var(--muted);font-size:13px;margin-top:44px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <img class="logo" src="assets/icon.png" alt="klipa" />
+    <h1>Welcome to klipa</h1>
+    <p class="lead">A 2-minute walkthrough. klipa is running right now.</p>
+  </header>
+
+  <div class="step">
+    <span class="num">1</span><h2>Look up at your menu bar</h2>
+    <p>klipa runs as a tiny clipboard icon in the top-right of your screen,
+    next to Wi-Fi and the clock. There is no window, no dock icon, no
+    onboarding form. If you can see the clipboard glyph up there, you are
+    all set.</p>
+  </div>
+
+  <div class="step">
+    <span class="num">2</span><h2>Click it to see your clipboard history</h2>
+    <p>Every time you copy something (text, an image, anything), klipa
+    remembers it. Click the menu bar icon, and your last few entries drop
+    down. Click any entry to copy it back to the clipboard. Then paste
+    like you normally would (<span class="kbd">⌘ V</span>).</p>
+  </div>
+
+  <div class="step">
+    <span class="num">3</span><h2>Optional: swap the icon for date or temperature</h2>
+    <p>Under <b>Menu bar</b> in the dropdown, pick what appears in the
+    status bar. Three options besides the default clipboard glyph:</p>
+    <ul>
+      <li><b>Date</b> - today's short date, e.g. <span class="kbd">Wed 30</span>.</li>
+      <li><b>Temperature</b> - current temperature at your location.</li>
+      <li><b>Date + Temperature</b> - both.</li>
+    </ul>
+    <p>The temperature modes make two small HTTPS calls (approximate
+    location from IP, current temperature from open-meteo). Icon-only and
+    Date make zero network calls.</p>
+  </div>
+
+  <div class="step">
+    <span class="num">4</span><h2>Keep your Mac awake when you need to</h2>
+    <p>The <b>Keep awake</b> submenu stops the machine from sleeping for
+    5 min up to 5 hours, or indefinitely. Toggle it on when you are on a
+    long download or a video call and turn it off when you are done.</p>
+  </div>
+
+  <div class="step">
+    <span class="num">5</span><h2>7-day free trial, then a one-time €1.99</h2>
+    <p>The direct-download build is free in full for 7 days. After that
+    an <b>Unlock full version</b> item appears in the menu; buy a license
+    key once, paste it into klipa, and it is yours forever - no
+    subscription. The Mac App Store build handles payment through Apple
+    instead, so it has no trial at all.</p>
+  </div>
+
+  <p class="cta"><a href="index.html">Take me to klipa</a></p>
+
+  <footer>
+    Questions or bugs: <a href="https://github.com/peterdsp/klipa/issues">GitHub Issues</a>
+    &nbsp;&middot;&nbsp;
+    <a href="privacy.html">Privacy Policy</a>
+  </footer>
+</div>
+</body>
+</html>

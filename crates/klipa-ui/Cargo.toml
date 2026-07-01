@@ -20,8 +20,9 @@ default = ["frontmost", "license", "weather"]
 frontmost = ["dep:active-win-pos-rs"]
 # Paid-version gate: a 7-day free trial then a €1.99 unlock, with online
 # license-key verification via curl. Disabled for the Mac App Store
-# build, where the store handles payment.
-license = []
+# build, where the store handles payment. Pulls in the `keyring` crate
+# so the trial start survives a reinstall.
+license = ["dep:keyring"]
 # Opt-in "temperature next to the menu bar clock" mode via curl. Uses
 # ip-api.com for coarse geolocation and open-meteo.com for the
 # temperature. Off (compiled out) at build time only if you want a
@@ -62,6 +63,11 @@ tray-icon = "0.24"
 # No window/renderer is created, so none of the GPU stack is pulled in.
 winit = "0.30"
 active-win-pos-rs = { version = "0.9", optional = true }
+# OS keychain access for a tamper-resistant trial anchor: macOS
+# Keychain, Windows Credential Manager, Linux Secret Service. Ships
+# with the license feature only (App Store build handles paid-vs-free
+# via the store) so the MAS binary carries none of this weight.
+keyring = { version = "3", optional = true, features = ["apple-native", "windows-native", "linux-native-sync-persistent"] }
 
 # macOS-only: convert the process to a menubar accessory app
 # (no dock icon, no main menu) by calling
