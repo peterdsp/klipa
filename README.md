@@ -109,6 +109,28 @@ effect there.
 running and watching the clipboard. Relaunch klipa to bring the icon
 back.
 
+### Menu bar display
+
+Open **Menu bar** and pick what appears next to the tray icon:
+
+- **Icon only** (default) - nothing beyond the little clipboard glyph.
+- **Date** - short local date, e.g. `Wed 30`.
+- **Temperature** - current temperature at your location, e.g. `22°`.
+- **Date + Temperature** - both, e.g. `Wed 30  22°`.
+
+Your choice is saved in `settings.json` next to `history.json`.
+
+> **Network note.** The **Icon only** and **Date** modes make **zero
+> network calls** - klipa's core promise ("local-only, no network") is
+> unchanged. Only the two temperature modes reach the internet: coarse
+> location from your IP via ip-api.com (cached 24 h) and the temperature
+> from open-meteo.com (cached 10 min). Both are free, keyless, and
+> ~6 requests/hour while the mode is on.
+
+On macOS and Linux (ayatana-appindicator) the text renders **next to**
+the icon in the menu bar. On Windows the tray backend does not display
+title text, so the value shows in the tooltip instead.
+
 ## Footprint
 
 | | |
@@ -132,6 +154,8 @@ klipa/
         ├── tray.rs      menubar icon + history dropdown (tray-icon + muda)
         ├── awake.rs     keep-awake sessions (caffeinate/Win32/systemd-inhibit)
         ├── license.rs   7-day trial + €1.99 unlock (off in the App Store build)
+        ├── settings.rs  persistent user prefs (menu bar display mode)
+        ├── weather.rs   opt-in IP location + open-meteo temperature
         ├── platform.rs  macOS menubar-accessory tweak
         └── main.rs      composition root + winit event loop
 ```
@@ -154,6 +178,7 @@ Inner layers never import outer layers. `klipa-core` has zero of:
 - Native **menubar dropdown** of recent copies; click to paste (`tray-icon`)
 - **Keep-awake sessions** - timed or indefinite, native on macOS / Windows / Linux
 - **Hide menubar icon** while klipa keeps running in the background
+- **Menu bar display**: icon only (default), date, temperature, or both
 - **7-day free trial**, then a one-time **€1.99** unlock (App Store build excluded)
 - Frontmost-app capture per OS via `active-win-pos-rs`
 - macOS menubar accessory (no dock icon)

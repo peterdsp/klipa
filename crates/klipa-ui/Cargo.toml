@@ -13,7 +13,7 @@ name = "klipa"
 path = "src/main.rs"
 
 [features]
-default = ["frontmost", "license"]
+default = ["frontmost", "license", "weather"]
 # Capture the frontmost app name when an item is copied. Uses
 # active-win-pos-rs (CGWindowList / accessibility). Disabled for the
 # Mac App Store build, where the sandbox forbids it.
@@ -22,6 +22,12 @@ frontmost = ["dep:active-win-pos-rs"]
 # license-key verification. Pulls in a tiny HTTPS client (ureq + rustls).
 # Disabled for the Mac App Store build, where the store handles payment.
 license = ["dep:ureq"]
+# Opt-in "temperature next to the menu bar clock" mode. Uses ip-api.com
+# for coarse geolocation and open-meteo.com for the temperature. Both
+# free and keyless. Off (compiled out) at build time only if you want a
+# strictly zero-network binary; runtime default is still icon-only, so
+# no network call is made unless the user picks a weather mode.
+weather = ["dep:ureq"]
 # Mac App Store target marker: build with
 #   cargo build --no-default-features --features mas
 mas = []
@@ -43,9 +49,11 @@ arboard = "3"
 # Capture images (screenshots) too; store them PNG-compressed.
 png = "0.17"
 base64 = "0.22"
-# serde-well-known enables the rfc3339 (de)serializer used for the
-# trial/license timestamps.
-time = { version = "0.3", features = ["serde-well-known"] }
+# serde-well-known: rfc3339 (de)serializer for trial/license timestamps.
+# macros + formatting + local-offset: for the "Wed 30" menu bar date.
+time = { version = "0.3", features = [
+    "serde-well-known", "macros", "formatting", "local-offset",
+] }
 uuid = { version = "1", features = ["v4", "serde"] }
 directories = "5"
 # Native tray icon + dropdown menu (the entire UI), cross-platform.

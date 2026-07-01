@@ -14,7 +14,9 @@ mod awake;
 mod license;
 mod paths;
 mod platform;
+mod settings;
 mod tray;
+mod weather;
 
 use adapters::{clipboard::ArboardClipboard, storage::JsonStore};
 use klipa_core::{HistoryItemId, HistoryService};
@@ -48,6 +50,12 @@ struct Klipa {
     locked: Arc<AtomicBool>,
     /// Last time the trial/license state was reflected in the menu.
     license_refreshed: Instant,
+    /// User preferences (currently: menu bar display).
+    settings: settings::Settings,
+    /// Cache for the temperature backing the "weather" menu bar modes.
+    weather: weather::WeatherState,
+    /// Last time the menu bar title (date/temp) was refreshed.
+    menubar_refreshed: Instant,
 }
 
 impl Klipa {
@@ -63,8 +71,29 @@ impl Klipa {
                 &gate,
                 license::License::price(),
                 notice.as_deref(),
+                self.settings.menubar_display,
             );
         }
+    }
+
+    /// Refresh the tray title (date / temperature). Runs the network
+    /// call on the tokio blocking pool so the event loop never stalls.
+    fn refresh_menubar_title(&mut self) {
+        let Some(tray) = &self.tray else { return };
+        let display = self.settings.menubar_display;
+        let title = settings::menubar_title(display, &mut self.weather);
+        tray.set_title(title.as_deref());
+        self.menubar_refreshed = Instant::now();
+    }
+
+    fn set_menubar_display(&mut self, mode: settings::MenubarDisplay) {
+        if self.settings.menubar_display == mode {
+            return;
+        }
+        self.settings.menubar_display = mode;
+        self.settings.save();
+        self.refresh_menubar_title();
+        self.rebuild_menu();
     }
 }
 
@@ -76,6 +105,7 @@ impl ApplicationHandler for Klipa {
             platform::make_menubar_only();
             self.tray = Some(tray::Tray::new());
             self.rebuild_menu();
+            self.refresh_menubar_title();
             tracing::info!("klipa ready - menubar icon active");
         }
     }
@@ -106,6 +136,10 @@ impl ApplicationHandler for Klipa {
                     self.license.activate_from_clipboard();
                     self.rebuild_menu();
                 }
+                tray::MENUBAR_ICON_ID => self.set_menubar_display(settings::MenubarDisplay::IconOnly),
+                tray::MENUBAR_DATE_ID => self.set_menubar_display(settings::MenubarDisplay::Date),
+                tray::MENUBAR_TEMP_ID => self.set_menubar_display(settings::MenubarDisplay::Temperature),
+                tray::MENUBAR_BOTH_ID => self.set_menubar_display(settings::MenubarDisplay::Both),
                 tray::AWAKE_END_ID => {
                     self.awake.end();
                     self.rebuild_menu();
@@ -154,6 +188,13 @@ impl ApplicationHandler for Klipa {
         if self.license_refreshed.elapsed() >= Duration::from_secs(20) {
             self.license_refreshed = Instant::now();
             self.rebuild_menu();
+        }
+
+        // Refresh the menu bar title once a minute: the date rolls over
+        // at midnight, and the temperature cache re-fetches on its own
+        // TTL from inside the WeatherState.
+        if self.menubar_refreshed.elapsed() >= Duration::from_secs(60) {
+            self.refresh_menubar_title();
         }
 
         event_loop.set_control_flow(ControlFlow::WaitUntil(Instant::now() + TICK));
@@ -213,6 +254,9 @@ fn main() {
         license,
         locked,
         license_refreshed: Instant::now(),
+        settings: settings::Settings::load(),
+        weather: weather::WeatherState::new(),
+        menubar_refreshed: Instant::now(),
     };
     if let Err(e) = event_loop.run_app(&mut app) {
         tracing::error!(?e, "event loop exited with error");
