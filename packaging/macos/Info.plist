@@ -34,5 +34,12 @@
   <!-- Required usage strings for clipboard / window inspection. -->
   <key>NSAppleEventsUsageDescription</key>
   <string>klipa pastes a selected entry into the frontmost application.</string>
+  <!-- klipa uses only standard TLS (via /usr/bin/curl and the OS trust
+       store) for its optional temperature and update-check requests.
+       No proprietary crypto, no non-exempt use of encryption, so we
+       declare the ITSAppUsesNonExemptEncryption exemption here to
+       skip the compliance prompt on every App Store upload. -->
+  <key>ITSAppUsesNonExemptEncryption</key>
+  <false/>
 </dict>
 </plist>
