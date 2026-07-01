@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>klipa - Press Kit</title>
+<meta name="description" content="klipa press kit: logos, screenshots, install commands, one-liner descriptions, and press contact. A menu bar clipboard manager for macOS, Windows and Linux." />
+<link rel="canonical" href="https://klipa.peterdsp.dev/press.html" />
+<link rel="icon" type="image/png" href="assets/favicon.png" />
+<meta property="og:title" content="klipa - Press Kit" />
+<meta property="og:description" content="Everything you need to write about klipa: logos, screenshots, one-liners, install commands." />
+<meta property="og:image" content="assets/favicon.png" />
+<meta name="theme-color" content="#0e0f12" />
+<style>
+  :root{
+    --bg:#0e0f12; --card:rgba(255,255,255,.05); --stroke:rgba(255,255,255,.10);
+    --text:#eceef2; --muted:#9aa3af; --accent2:#6ea8fe;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    color:var(--text);background:var(--bg);line-height:1.6;
+    background-image:radial-gradient(1100px 600px at 50% -10%,rgba(59,130,246,.15),transparent 60%);
+    -webkit-font-smoothing:antialiased;padding:56px 22px 80px;
+  }
+  a{color:var(--accent2);text-decoration:none}
+  a:hover{text-decoration:underline}
+  .wrap{max-width:960px;margin:0 auto}
+  header{text-align:center;margin-bottom:44px}
+  .logo{width:96px;height:96px;filter:drop-shadow(0 12px 30px rgba(0,0,0,.5))}
+  h1{font-size:36px;letter-spacing:-.02em;margin:16px 0 4px}
+  .lead{color:var(--muted);font-size:16px}
+  .nav{margin-top:10px;font-size:14px}
+  .nav a{margin:0 8px}
+
+  h2{font-size:22px;letter-spacing:-.01em;margin:44px 0 14px;color:#fff}
+
+  .card{
+    border:1px solid var(--stroke);background:var(--card);border-radius:14px;
+    padding:22px;backdrop-filter:blur(12px);margin-bottom:14px;
+  }
+  .fact{display:grid;grid-template-columns:170px 1fr;gap:8px 20px;font-size:15px}
+  .fact dt{color:var(--muted)}
+  .fact dd{color:#eceef2}
+
+  .lines .card{position:relative}
+  .lines b{color:#fff;font-weight:600;font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+  .lines p{margin-top:6px;color:#eceef2;font-size:15px;line-height:1.55}
+  .copyhint{position:absolute;top:14px;right:16px;color:var(--muted);font-size:12px}
+
+  ul.feat{list-style:none;padding-left:0;margin:0}
+  ul.feat li{padding:8px 0;color:#d8dbe1;border-bottom:1px solid rgba(255,255,255,.06);font-size:15px}
+  ul.feat li:last-child{border-bottom:none}
+  ul.feat b{color:#fff}
+
+  .shots{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  @media(max-width:700px){.shots{grid-template-columns:1fr}}
+  .shot{border:1px solid var(--stroke);border-radius:12px;overflow:hidden;background:#000}
+  .shot img{display:block;width:100%;height:auto}
+  .shot .cap{padding:10px 14px;font-size:13px;color:var(--muted);display:flex;justify-content:space-between;align-items:center}
+  .shot .cap b{color:#eceef2;font-weight:500}
+
+  .cmds pre{
+    background:#08090b;border:1px solid var(--stroke);border-radius:10px;
+    padding:12px 16px;font:14px ui-monospace,SFMono-Regular,Menlo,monospace;
+    color:#d8dbe1;overflow-x:auto;margin:8px 0;
+  }
+  .cmds .os{color:var(--muted);font-size:13px;margin-top:16px;text-transform:uppercase;letter-spacing:.06em}
+  .cmds .os:first-child{margin-top:0}
+
+  .logos{display:flex;gap:14px;flex-wrap:wrap}
+  .logos a{
+    display:flex;align-items:center;gap:12px;
+    border:1px solid var(--stroke);background:var(--card);
+    padding:12px 16px;border-radius:12px;color:#eceef2;
+  }
+  .logos img{width:44px;height:44px}
+  .logos small{color:var(--muted);display:block}
+
+  footer{margin-top:56px;padding-top:22px;border-top:1px solid var(--stroke);
+    text-align:center;color:var(--muted);font-size:13px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <img class="logo" src="assets/icon.png" alt="klipa" />
+    <h1>klipa - Press Kit</h1>
+    <p class="lead">Everything you need to write about klipa in 60 seconds.</p>
+    <p class="nav">
+      <a href="index.html">Website</a> ·
+      <a href="https://github.com/peterdsp/klipa">GitHub</a> ·
+      <a href="mailto:info@peterdsp.dev">Press contact</a>
+    </p>
+  </header>
+
+  <h2>Quick facts</h2>
+  <div class="card">
+    <dl class="fact">
+      <dt>What it is</dt><dd>A native menu bar clipboard manager with keep-awake sessions.</dd>
+      <dt>Platforms</dt><dd>macOS 11+, Windows 10/11, Linux (x86-64)</dd>
+      <dt>Size</dt><dd>~1.6 MB (self-contained, universal binary on macOS)</dd>
+      <dt>Language</dt><dd>Pure Rust. No Electron, no WebView, no JavaScript runtime.</dd>
+      <dt>License</dt><dd>MIT (open source)</dd>
+      <dt>Pricing</dt><dd>7-day free trial then €1.99 one-time (direct download). Same €1.99 on the Mac App Store.</dd>
+      <dt>Privacy</dt><dd>Local-only by default. No accounts, no telemetry, no cloud sync.</dd>
+      <dt>Website</dt><dd><a href="https://klipa.peterdsp.dev">klipa.peterdsp.dev</a></dd>
+      <dt>Source</dt><dd><a href="https://github.com/peterdsp/klipa">github.com/peterdsp/klipa</a></dd>
+      <dt>Built by</dt><dd>Petros Dhespollari (<a href="https://peterdsp.dev">peterdsp.dev</a>, <a href="mailto:info@peterdsp.dev">info@peterdsp.dev</a>)</dd>
+    </dl>
+  </div>
+
+  <h2>Descriptions (copy any of these)</h2>
+  <div class="lines">
+    <div class="card">
+      <b>1-line</b>
+      <p>klipa is a tiny, native menu bar clipboard manager for macOS, Windows and Linux - with keep-awake sessions.</p>
+    </div>
+    <div class="card">
+      <b>Short (Twitter / socials)</b>
+      <p>A 1.6 MB native menu bar clipboard manager for Mac, Windows and Linux. Clipboard history in a native dropdown, keep-awake sessions, optional date/temperature next to the icon. Pure Rust, no Electron, no telemetry. €1.99 one-time or 7-day free trial.</p>
+    </div>
+    <div class="card">
+      <b>Long (blogs / newsletters)</b>
+      <p>klipa is a tiny, fast menu bar clipboard manager for macOS, Windows and Linux. It keeps a history of everything you copy - text and images - in a native menu bar dropdown; click any entry to copy it back and paste. It also offers keep-awake sessions to stop your machine from sleeping (5 minutes to 5 hours, or indefinitely), and can optionally show the date, the current temperature at your location, or both next to the clipboard icon in the status bar. klipa is about 1.6 MB, written in pure Rust with no Electron, no WebView and no JavaScript runtime. Your clipboard history stays on your device - klipa has no accounts, no cloud sync and no telemetry. It's MIT-licensed and available for €1.99 one-time (with a 7-day free trial) direct-download, plus on the Mac App Store, Homebrew, Scoop, winget and AUR.</p>
+    </div>
+  </div>
+
+  <h2>Feature bullets (for lists / reviews)</h2>
+  <div class="card">
+    <ul class="feat">
+      <li><b>Native menu bar dropdown</b> - clipboard history one click away, no window, no dock icon.</li>
+      <li><b>Text and image entries</b> - screenshots get a preview thumbnail in the dropdown.</li>
+      <li><b>Keep-awake sessions</b> - 5 min to 5 hours, or indefinitely (uses caffeinate / SetThreadExecutionState / systemd-inhibit).</li>
+      <li><b>Menu bar display</b> - swap the icon for today's date, the temperature at your location, or both.</li>
+      <li><b>Configurable dropdown size</b> - show 10, 25, 50 or 100 recent entries.</li>
+      <li><b>Ultralight</b> - ~1.6 MB binary, ~10 MB RAM. No Electron, no browser engine.</li>
+      <li><b>Local-only by default</b> - no accounts, no telemetry, no cloud.</li>
+      <li><b>Cross-platform</b> - macOS 11+, Windows 10/11, Linux (x86-64). One Rust codebase.</li>
+      <li><b>Open source</b> - MIT-licensed at github.com/peterdsp/klipa.</li>
+    </ul>
+  </div>
+
+  <h2>Screenshots (2560&times;1600, App Store format)</h2>
+  <div class="shots">
+    <div class="shot">
+      <a href="assets/press/klipa-01-clipboard-history.png" target="_blank"><img src="assets/press/klipa-01-clipboard-history-1280.png" alt="klipa clipboard history dropdown" /></a>
+      <p class="cap"><b>Clipboard history dropdown</b><a href="assets/press/klipa-01-clipboard-history.png" download>Download</a></p>
+    </div>
+    <div class="shot">
+      <a href="assets/press/klipa-02-keep-awake.png" target="_blank"><img src="assets/press/klipa-02-keep-awake-1280.png" alt="klipa keep-awake sessions" /></a>
+      <p class="cap"><b>Keep-awake sessions</b><a href="assets/press/klipa-02-keep-awake.png" download>Download</a></p>
+    </div>
+    <div class="shot">
+      <a href="assets/press/klipa-03-menu-bar-display.png" target="_blank"><img src="assets/press/klipa-03-menu-bar-display-1280.png" alt="klipa menu bar display options" /></a>
+      <p class="cap"><b>Menu bar display options</b><a href="assets/press/klipa-03-menu-bar-display.png" download>Download</a></p>
+    </div>
+    <div class="shot">
+      <a href="assets/press/klipa-04-dropdown-size.png" target="_blank"><img src="assets/press/klipa-04-dropdown-size-1280.png" alt="klipa dropdown size settings" /></a>
+      <p class="cap"><b>Configurable dropdown size</b><a href="assets/press/klipa-04-dropdown-size.png" download>Download</a></p>
+    </div>
+  </div>
+
+  <h2>Install commands (copy-paste)</h2>
+  <div class="card cmds">
+    <p class="os">macOS - Homebrew</p>
+    <pre>brew tap peterdsp/klipa https://github.com/peterdsp/klipa
+brew install --cask klipa</pre>
+    <p class="os">Windows - winget or Scoop</p>
+    <pre>winget install dev.peterdsp.klipa</pre>
+    <pre>scoop bucket add klipa https://github.com/peterdsp/klipa
+scoop install klipa</pre>
+    <p class="os">Linux - Arch (AUR)</p>
+    <pre>yay -S klipa-bin</pre>
+    <p class="os">Any platform - from source</p>
+    <pre>cargo install --git https://github.com/peterdsp/klipa klipa-ui</pre>
+    <p class="os">Or download an installer</p>
+    <pre>https://klipa.peterdsp.dev</pre>
+  </div>
+
+  <h2>Logos &amp; icon</h2>
+  <div class="logos">
+    <a href="assets/icon.png" download>
+      <img src="assets/icon.png" alt="klipa icon 512" />
+      <span>App icon<small>512&times;512 PNG</small></span>
+    </a>
+    <a href="assets/favicon.png" download>
+      <img src="assets/favicon.png" alt="klipa favicon 256" />
+      <span>Favicon<small>256&times;256 PNG</small></span>
+    </a>
+  </div>
+
+  <h2>Press contact</h2>
+  <div class="card">
+    <p><strong>Petros Dhespollari</strong> - creator &amp; developer</p>
+    <p>Email: <a href="mailto:info@peterdsp.dev">info@peterdsp.dev</a></p>
+    <p>Personal site: <a href="https://peterdsp.dev">peterdsp.dev</a></p>
+    <p>Happy to answer questions, provide review builds, or record a demo. Best response time is European daytime.</p>
+  </div>
+
+  <footer>
+    <p>klipa &middot; MIT Licensed &middot; <a href="index.html">Home</a> &middot; <a href="privacy.html">Privacy</a> &middot; <a href="https://github.com/peterdsp/klipa">GitHub</a></p>
+  </footer>
+</div>
+</body>
+</html>
