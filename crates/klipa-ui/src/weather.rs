@@ -13,6 +13,7 @@
 //! When the `weather` feature is off (e.g. a minimal build) the whole
 //! module compiles to a no-op that always returns `None`.
 
+#[cfg(feature = "weather")]
 use std::time::{Duration, Instant};
 
 /// Fetched-and-cached current temperature (integer °C).
@@ -98,11 +99,11 @@ mod imp {
     /// Ask ip-api.com where the caller's IP lives. Free, no key, no
     /// account. Returns None on any failure.
     fn ip_geolocate() -> Option<(f64, f64)> {
-        let resp = ureq::get("http://ip-api.com/json/?fields=status,lat,lon")
-            .timeout(HTTP_TIMEOUT)
-            .call()
-            .ok()?;
-        let json: serde_json::Value = resp.into_json().ok()?;
+        let body = crate::http::get(
+            "http://ip-api.com/json/?fields=status,lat,lon",
+            HTTP_TIMEOUT,
+        )?;
+        let json: serde_json::Value = serde_json::from_slice(&body).ok()?;
         if json.get("status").and_then(|v| v.as_str()) != Some("success") {
             return None;
         }
@@ -117,8 +118,8 @@ mod imp {
         let url = format!(
             "https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current_weather=true"
         );
-        let resp = ureq::get(&url).timeout(HTTP_TIMEOUT).call().ok()?;
-        let json: serde_json::Value = resp.into_json().ok()?;
+        let body = crate::http::get(&url, HTTP_TIMEOUT)?;
+        let json: serde_json::Value = serde_json::from_slice(&body).ok()?;
         let t = json
             .get("current_weather")?
             .get("temperature")?

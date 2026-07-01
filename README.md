@@ -7,7 +7,7 @@
 > A small, fast, cross-platform clipboard manager.
 
 Pure Rust, **no system WebView**, **no JavaScript runtime**, **no GPU
-renderer**. A ~1.3 MB self-contained binary on Windows, Linux, and macOS.
+renderer**. A ~1.6 MB self-contained binary on Windows, Linux, and macOS.
 
 ## Install
 
@@ -135,7 +135,7 @@ title text, so the value shows in the tooltip instead.
 
 | | |
 |---|---|
-| Binary size | ~1.3 MB |
+| Binary size | ~1.6 MB (no bundled TLS or HTTP client) |
 | Typical RSS | ~8-15 MB |
 | History store | last 200 entries in a small JSON file |
 
