@@ -19,15 +19,15 @@ default = ["frontmost", "license", "weather"]
 # Mac App Store build, where the sandbox forbids it.
 frontmost = ["dep:active-win-pos-rs"]
 # Paid-version gate: a 7-day free trial then a €1.99 unlock, with online
-# license-key verification. Pulls in a tiny HTTPS client (ureq + rustls).
-# Disabled for the Mac App Store build, where the store handles payment.
-license = ["dep:ureq"]
-# Opt-in "temperature next to the menu bar clock" mode. Uses ip-api.com
-# for coarse geolocation and open-meteo.com for the temperature. Both
-# free and keyless. Off (compiled out) at build time only if you want a
+# license-key verification via curl. Disabled for the Mac App Store
+# build, where the store handles payment.
+license = []
+# Opt-in "temperature next to the menu bar clock" mode via curl. Uses
+# ip-api.com for coarse geolocation and open-meteo.com for the
+# temperature. Off (compiled out) at build time only if you want a
 # strictly zero-network binary; runtime default is still icon-only, so
 # no network call is made unless the user picks a weather mode.
-weather = ["dep:ureq"]
+weather = []
 # Mac App Store target marker: build with
 #   cargo build --no-default-features --features mas
 mas = []
@@ -62,9 +62,6 @@ tray-icon = "0.24"
 # No window/renderer is created, so none of the GPU stack is pulled in.
 winit = "0.30"
 active-win-pos-rs = { version = "0.9", optional = true }
-# Tiny blocking HTTPS client for one-shot license-key verification
-# (rustls, no OpenSSL). Only pulled in with the `license` feature.
-ureq = { version = "2", features = ["json"], optional = true }
 
 # macOS-only: convert the process to a menubar accessory app
 # (no dock icon, no main menu) by calling

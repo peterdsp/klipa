@@ -11,6 +11,7 @@
 
 mod adapters;
 mod awake;
+mod http;
 mod license;
 mod paths;
 mod platform;

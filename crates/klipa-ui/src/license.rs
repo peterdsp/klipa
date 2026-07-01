@@ -304,24 +304,23 @@ mod imp {
 
     /// One verify attempt using the given identifier field name.
     fn verify_with(key: &str, id_field: &str) -> Verify {
-        let resp = ureq::post("https://api.gumroad.com/v2/licenses/verify")
-            .timeout(StdDuration::from_secs(10))
-            .send_form(&[
+        let body = crate::http::post_form(
+            "https://api.gumroad.com/v2/licenses/verify",
+            &[
                 (id_field, GUMROAD_PRODUCT_ID),
                 ("license_key", key),
                 ("increment_uses_count", "false"),
-            ]);
-        let json: serde_json::Value = match resp {
-            Ok(r) => match r.into_json() {
-                Ok(j) => j,
-                Err(_) => return Verify::Network,
-            },
-            // Gumroad answers an invalid key with HTTP 404 + success:false.
-            Err(ureq::Error::Status(_, r)) => match r.into_json() {
-                Ok(j) => j,
-                Err(_) => return Verify::Invalid,
-            },
-            Err(_) => return Verify::Network,
+            ],
+            StdDuration::from_secs(10),
+        );
+        // Gumroad returns valid JSON on both success and invalid-key
+        // responses, so if we got no body at all we treat that as a
+        // network hiccup and keep any existing license (offline grace).
+        let Some(body) = body else {
+            return Verify::Network;
+        };
+        let Ok(json) = serde_json::from_slice::<serde_json::Value>(&body) else {
+            return Verify::Invalid;
         };
         let ok = json.get("success").and_then(|v| v.as_bool()).unwrap_or(false);
         let refunded = json
