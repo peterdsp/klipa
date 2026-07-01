@@ -40,6 +40,8 @@ pub const MENUBAR_ICON_ID: &str = "__klipa_menubar_icon";
 pub const MENUBAR_DATE_ID: &str = "__klipa_menubar_date";
 pub const MENUBAR_TEMP_ID: &str = "__klipa_menubar_temp";
 pub const MENUBAR_BOTH_ID: &str = "__klipa_menubar_both";
+/// "A new version is available, click to download + open it".
+pub const UPDATE_ID: &str = "__klipa_update";
 
 /// Keep-awake session presets shown in the submenu: (label, duration).
 /// `None` is an indefinite session.
@@ -114,6 +116,7 @@ impl Tray {
         price: &str,
         notice: Option<&str>,
         menubar: MenubarDisplay,
+        update: Option<&str>,
     ) {
         // Trial elapsed and unlicensed: show only the paywall.
         if gate.is_locked() {
@@ -173,6 +176,16 @@ impl Tray {
         }
 
         let _ = menu.append(&PredefinedMenuItem::separator());
+        if let Some(label) = update {
+            // Show a triangle glyph so the update item is easy to spot
+            // even when the menu is long.
+            let _ = menu.append(&MenuItem::with_id(
+                UPDATE_ID,
+                format!("\u{25b2}  {label}"),
+                true,
+                None,
+            ));
+        }
         let _ = menu.append(&MenuItem::with_id(HIDE_ICON_ID, "Hide menubar icon", true, None));
         let _ = menu.append(&MenuItem::with_id(QUIT_ID, "Quit klipa", true, None));
         self.icon.set_menu(Some(Box::new(menu)));

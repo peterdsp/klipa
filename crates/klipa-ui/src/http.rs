@@ -12,15 +12,18 @@
 //! caller degrades gracefully (weather shows no temperature; license
 //! stays in its current state). No panics, no user-visible errors.
 
-#[cfg(any(feature = "license", feature = "weather"))]
-use std::io::Write;
-#[cfg(any(feature = "license", feature = "weather"))]
+#[cfg(any(feature = "weather", feature = "license", not(feature = "mas")))]
 use std::process::{Command, Stdio};
-#[cfg(any(feature = "license", feature = "weather"))]
+#[cfg(any(feature = "weather", feature = "license", not(feature = "mas")))]
 use std::time::Duration;
+#[cfg(feature = "license")]
+use std::io::Write;
 
 /// GET a URL and return the response body. `None` on any failure.
-#[cfg(feature = "weather")]
+/// Compiled in when the weather feature or a non-App-Store build wants
+/// it (weather, updater). The strict "mas" build without weather has
+/// no HTTP GET consumer and this function is dropped.
+#[cfg(any(feature = "weather", not(feature = "mas")))]
 pub fn get(url: &str, timeout: Duration) -> Option<Vec<u8>> {
     let out = Command::new("curl")
         .arg("-sSL") // silent, show errors, follow redirects
