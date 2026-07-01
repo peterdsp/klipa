@@ -21,7 +21,8 @@ mod updater;
 mod weather;
 
 use adapters::{clipboard::ArboardClipboard, storage::JsonStore};
-use klipa_core::{HistoryItemId, HistoryService};
+use klipa_core::{HistoryItem, HistoryItemId, HistoryService};
+use std::hash::{Hash, Hasher};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -41,7 +42,7 @@ struct Klipa {
     /// Set by the clipboard watcher when new history lands.
     dirty: Arc<AtomicBool>,
     tray: Option<tray::Tray>,
-    /// Amphetamine-style keep-awake session manager.
+    /// Keep-awake session manager.
     awake: awake::KeepAwake,
     /// Last time the keep-awake countdown label was refreshed.
     awake_refreshed: Instant,
@@ -60,27 +61,55 @@ struct Klipa {
     /// Once-a-day background check for a newer release (no-op in the
     /// App Store build - MAS handles updates itself).
     updater: updater::UpdateState,
+    /// Hash of the last menu we actually drew. Rebuilds that would
+    /// produce an identical menu are skipped, so background timers never
+    /// tear down (and thus close) the dropdown while the user is
+    /// browsing it - the menu only redraws when its contents change.
+    menu_sig: Option<u64>,
 }
 
 impl Klipa {
+    /// Redraw the tray menu, but only if its contents actually changed
+    /// since the last draw. Reassigning the menu on macOS dismisses it
+    /// if it is open, so skipping no-op redraws is what keeps the
+    /// dropdown from closing under the user while background timers fire.
     fn rebuild_menu(&mut self) {
-        if let Some(tray) = &self.tray {
-            let items = self.rt.block_on(self.history.snapshot());
-            let gate = self.license.gate();
-            self.locked.store(gate.is_locked(), Ordering::Release);
-            let notice = self.license.transient_message();
-            let update = self.updater.menu_label();
-            tray.set_menu(
-                &items,
-                &self.awake.view(),
-                &gate,
-                license::License::price(),
-                notice.as_deref(),
-                self.settings.menubar_display,
-                update.as_deref(),
-                self.settings.dropdown_items,
-            );
+        let Some(tray) = &self.tray else { return };
+        let items = self.rt.block_on(self.history.snapshot());
+        let gate = self.license.gate();
+        // The watcher depends on this even when the menu itself is
+        // unchanged, so always keep it current.
+        self.locked.store(gate.is_locked(), Ordering::Release);
+        let awake = self.awake.view();
+        let notice = self.license.transient_message();
+        let update = self.updater.menu_label();
+
+        // Signature of everything the menu renders. If it matches the
+        // last drawn menu, there is nothing to redraw.
+        let sig = menu_signature(
+            &items,
+            &awake,
+            &gate,
+            notice.as_deref(),
+            self.settings.menubar_display,
+            update.as_deref(),
+            self.settings.dropdown_items,
+        );
+        if self.menu_sig == Some(sig) {
+            return;
         }
+        self.menu_sig = Some(sig);
+
+        tray.set_menu(
+            &items,
+            &awake,
+            &gate,
+            license::License::price(),
+            notice.as_deref(),
+            self.settings.menubar_display,
+            update.as_deref(),
+            self.settings.dropdown_items,
+        );
     }
 
     /// Refresh the tray title (date / temperature) and swap the glyph
@@ -226,6 +255,43 @@ impl ApplicationHandler for Klipa {
     }
 }
 
+/// Hash of everything the tray menu renders, so identical rebuilds can
+/// be skipped (see `Klipa::rebuild_menu`). Cheap: one pass over the
+/// entries the dropdown actually shows.
+#[allow(clippy::too_many_arguments)]
+fn menu_signature(
+    items: &[HistoryItem],
+    awake: &awake::AwakeView,
+    gate: &license::Gate,
+    notice: Option<&str>,
+    display: settings::MenubarDisplay,
+    update: Option<&str>,
+    dropdown_items: usize,
+) -> u64 {
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    items.len().hash(&mut h);
+    for it in items.iter().take(dropdown_items) {
+        it.id.0.hash(&mut h);
+        it.title.hash(&mut h);
+    }
+    awake.active.hash(&mut h);
+    awake.allow_display_sleep.hash(&mut h);
+    awake.status.hash(&mut h);
+    match gate {
+        license::Gate::Full => 0u8.hash(&mut h),
+        license::Gate::Trial { days_left } => {
+            1u8.hash(&mut h);
+            days_left.hash(&mut h);
+        }
+        license::Gate::Locked => 2u8.hash(&mut h),
+    }
+    notice.hash(&mut h);
+    (display as u8).hash(&mut h);
+    update.hash(&mut h);
+    dropdown_items.hash(&mut h);
+    h.finish()
+}
+
 /// Open a URL with the OS default handler.
 fn open_url(url: &str) {
     #[cfg(target_os = "macos")]
@@ -317,6 +383,7 @@ fn main() {
         weather: weather::WeatherState::new(),
         menubar_refreshed: Instant::now(),
         updater: updater::UpdateState::new(),
+        menu_sig: None,
     };
     if let Err(e) = event_loop.run_app(&mut app) {
         tracing::error!(?e, "event loop exited with error");
