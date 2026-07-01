@@ -105,6 +105,12 @@ impl Tray {
     pub fn set_icon_visible(&self, show_glyph: bool) {
         let icon = if show_glyph { clipboard_glyph() } else { blank_icon() };
         let _ = self.icon.set_icon(Some(icon));
+        // `set_icon` re-sets the NSImage with template=false (hardcoded in the
+        // tray-icon crate), which drops the template flag from `new()` and makes
+        // the glyph render as fixed black — invisible on dark menu bars. Re-apply
+        // template so macOS keeps tinting it (black on light, white on dark).
+        #[cfg(target_os = "macos")]
+        self.icon.set_icon_as_template(true);
     }
 
     /// Text shown next to the menubar icon (date, temperature, ...).
