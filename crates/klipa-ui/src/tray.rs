@@ -38,6 +38,15 @@ pub const MENUBAR_ICON_ID: &str = "__klipa_menubar_icon";
 pub const MENUBAR_DATE_ID: &str = "__klipa_menubar_date";
 pub const MENUBAR_TEMP_ID: &str = "__klipa_menubar_temp";
 pub const MENUBAR_BOTH_ID: &str = "__klipa_menubar_both";
+/// Prefix for "show N entries in the dropdown" items.
+pub const SHOW_COUNT_PREFIX: &str = "__klipa_show_count:";
+/// Preset dropdown sizes offered in the "Show in dropdown" submenu.
+const SHOW_COUNT_PRESETS: &[usize] = &[10, 25, 50, 100];
+
+/// Parse the count payload of a `SHOW_COUNT_PREFIX` menu id.
+pub fn parse_show_count(id: &str) -> Option<usize> {
+    id.strip_prefix(SHOW_COUNT_PREFIX)?.parse().ok()
+}
 /// "A new version is available, click to download + open it".
 pub const UPDATE_ID: &str = "__klipa_update";
 
@@ -60,9 +69,10 @@ pub fn parse_awake_start(id: &str) -> Option<Option<Duration>> {
     Some((secs > 0).then(|| Duration::from_secs(secs)))
 }
 
-/// How many recent entries to show in the dropdown (native menus get
-/// unwieldy beyond this; older items stay in history/the file).
-const MAX_MENU_ITEMS: usize = 25;
+/// Hard ceiling on dropdown entries regardless of the user's setting -
+/// native menus get unwieldy and slow to build beyond this. The user's
+/// configured "Show in dropdown" count is clamped to this.
+const MAX_MENU_ITEMS_HARD: usize = 100;
 const LABEL_MAX_CHARS: usize = 48;
 
 pub struct Tray {
@@ -117,6 +127,7 @@ impl Tray {
         notice: Option<&str>,
         menubar: MenubarDisplay,
         update: Option<&str>,
+        dropdown_items: usize,
     ) {
         // Trial elapsed and unlicensed: show only the paywall.
         if gate.is_locked() {
@@ -124,11 +135,12 @@ impl Tray {
             return;
         }
 
+        let shown = dropdown_items.clamp(1, MAX_MENU_ITEMS_HARD);
         let menu = Menu::new();
         if items.is_empty() {
             let _ = menu.append(&MenuItem::new("No clipboard history yet", false, None));
         } else {
-            for it in items.iter().take(MAX_MENU_ITEMS) {
+            for it in items.iter().take(shown) {
                 let id = it.id.0.to_string();
                 let label = menu_label(&it.title);
                 match self.image_ref(it).and_then(|r| self.thumb_icon(r)) {
@@ -148,6 +160,7 @@ impl Tray {
         let _ = menu.append(&PredefinedMenuItem::separator());
         let _ = menu.append(&build_awake_submenu(awake));
         let _ = menu.append(&build_menubar_submenu(menubar));
+        let _ = menu.append(&build_show_count_submenu(shown));
 
         // During the trial, surface the days left + unlock/activate.
         if let Gate::Trial { days_left } = gate {
@@ -293,6 +306,23 @@ fn build_menubar_submenu(current: MenubarDisplay) -> Submenu {
     add(MENUBAR_DATE_ID, "Date", MenubarDisplay::Date);
     add(MENUBAR_TEMP_ID, "Temperature", MenubarDisplay::Temperature);
     add(MENUBAR_BOTH_ID, "Date + Temperature", MenubarDisplay::Both);
+    sub
+}
+
+/// Build the "Show in dropdown" submenu: how many clipboard entries the
+/// dropdown lists when clicked. The current value is checkmarked.
+fn build_show_count_submenu(current: usize) -> Submenu {
+    let sub = Submenu::new("Show in dropdown", true);
+    for &n in SHOW_COUNT_PRESETS {
+        let id = format!("{SHOW_COUNT_PREFIX}{n}");
+        let _ = sub.append(&CheckMenuItem::with_id(
+            id,
+            format!("{n} entries"),
+            true,
+            current == n,
+            None,
+        ));
+    }
     sub
 }
 
