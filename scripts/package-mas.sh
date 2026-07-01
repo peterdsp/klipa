@@ -21,9 +21,11 @@ PKG="dist/klipa-${VERSION}-mas.pkg"
 ENT="$(mktemp).mas.entitlements"
 sed "s/TEAMID/${TEAMID}/g" packaging/macos/entitlements.mas.plist > "$ENT"
 
-# `mas` feature + no default features compiles out the sandbox-incompatible
-# frontmost-window capture.
-TARGET="universal" FEATURES="mas" NO_DEFAULT="1" ./scripts/bundle-macos.sh
+# `mas` compiles out sandbox-incompatible frontmost-window capture (and
+# the licensing gate, since the store handles payment). `weather` stays
+# on so the App Store build can still show temperature in the menu bar
+# when the user opts in - the store permits outbound HTTP.
+TARGET="universal" FEATURES="mas weather" NO_DEFAULT="1" ./scripts/bundle-macos.sh
 
 if [ -n "${PROFILE:-}" ]; then
   cp "$PROFILE" "$APP/Contents/embedded.provisionprofile"

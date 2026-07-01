@@ -7,6 +7,7 @@
 use crate::adapters::clipboard::{decode_png, read_image_png};
 use crate::awake::AwakeView;
 use crate::license::Gate;
+use crate::settings::MenubarDisplay;
 use klipa_core::{HistoryItem, ItemKind};
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -34,6 +35,11 @@ pub const HIDE_ICON_ID: &str = "__klipa_hide_icon";
 /// Open the purchase page / activate a license key.
 pub const BUY_ID: &str = "__klipa_buy";
 pub const ACTIVATE_ID: &str = "__klipa_activate";
+/// Menu bar display presets.
+pub const MENUBAR_ICON_ID: &str = "__klipa_menubar_icon";
+pub const MENUBAR_DATE_ID: &str = "__klipa_menubar_date";
+pub const MENUBAR_TEMP_ID: &str = "__klipa_menubar_temp";
+pub const MENUBAR_BOTH_ID: &str = "__klipa_menubar_both";
 
 /// Keep-awake session presets shown in the submenu: (label, duration).
 /// `None` is an indefinite session.
@@ -89,6 +95,14 @@ impl Tray {
         let _ = self.icon.set_visible(visible);
     }
 
+    /// Text shown next to the menubar icon (date, temperature, ...).
+    /// Pass `None` for icon-only. macOS + Linux (ayatana-appindicator)
+    /// render this next to the tray icon; on Windows the tray-icon
+    /// crate treats it as a tooltip.
+    pub fn set_title(&self, text: Option<&str>) {
+        self.icon.set_title(text);
+    }
+
     /// Rebuild the dropdown from the current history snapshot, the
     /// keep-awake session state, and the license gate. `notice` is an
     /// optional transient status line (e.g. activation feedback).
@@ -99,6 +113,7 @@ impl Tray {
         gate: &Gate,
         price: &str,
         notice: Option<&str>,
+        menubar: MenubarDisplay,
     ) {
         // Trial elapsed and unlicensed: show only the paywall.
         if gate.is_locked() {
@@ -129,6 +144,7 @@ impl Tray {
 
         let _ = menu.append(&PredefinedMenuItem::separator());
         let _ = menu.append(&build_awake_submenu(awake));
+        let _ = menu.append(&build_menubar_submenu(menubar));
 
         // During the trial, surface the days left + unlock/activate.
         if let Gate::Trial { days_left } = gate {
@@ -243,6 +259,29 @@ fn build_awake_submenu(awake: &AwakeView) -> Submenu {
         awake.active,
         None,
     ));
+    sub
+}
+
+/// Build the "Menu bar" submenu with the four display presets. The
+/// currently-selected preset is shown with a checkmark. Temperature
+/// options are visible on every platform; they only make an HTTP call
+/// once the user actually picks them, so the icon-only default (which
+/// is unchanged) never touches the network.
+fn build_menubar_submenu(current: MenubarDisplay) -> Submenu {
+    let sub = Submenu::new("Menu bar", true);
+    let add = |id: &str, label: &str, mode: MenubarDisplay| {
+        let _ = sub.append(&CheckMenuItem::with_id(
+            id,
+            label,
+            true,
+            current == mode,
+            None,
+        ));
+    };
+    add(MENUBAR_ICON_ID, "Icon only", MenubarDisplay::IconOnly);
+    add(MENUBAR_DATE_ID, "Date", MenubarDisplay::Date);
+    add(MENUBAR_TEMP_ID, "Temperature", MenubarDisplay::Temperature);
+    add(MENUBAR_BOTH_ID, "Date + Temperature", MenubarDisplay::Both);
     sub
 }
 

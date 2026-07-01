@@ -29,3 +29,8 @@ pub fn image_path(id: &str) -> Option<PathBuf> {
 pub fn license_file() -> Option<PathBuf> {
     data_dir().map(|d| d.join("license.json"))
 }
+
+/// User preferences (menu bar display, weather location, ...).
+pub fn settings_file() -> Option<PathBuf> {
+    data_dir().map(|d| d.join("settings.json"))
+}
