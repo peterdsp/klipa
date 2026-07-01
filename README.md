@@ -4,10 +4,13 @@
 
 # klipa
 
-> A small, fast, cross-platform clipboard manager.
+> A tiny, fast **menu bar clipboard manager** for **macOS, Windows, and Linux** - with keep-awake sessions.
 
-Pure Rust, **no system WebView**, **no JavaScript runtime**, **no GPU
-renderer**. A ~1.6 MB self-contained binary on Windows, Linux, and macOS.
+klipa is a native **menu bar / system tray clipboard manager** (a
+menubar app) that keeps your **clipboard history** one click away on
+**macOS, Windows, and Linux**, plus **keep-awake** sessions that stop
+your machine from sleeping. Pure Rust, **no system WebView**, **no JavaScript runtime**,
+**no GPU renderer** - a ~1.6 MB self-contained binary.
 
 ## Install
 

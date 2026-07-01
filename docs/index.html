@@ -3,14 +3,38 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>klipa - a small, fast clipboard manager</title>
-<meta name="description" content="klipa is a small, fast, cross-platform clipboard manager. Pure Rust, no WebView, no JavaScript runtime. macOS, Windows, and Linux." />
+<title>klipa - menu bar clipboard manager for macOS, Windows & Linux</title>
+<meta name="description" content="klipa is a tiny, fast menu bar clipboard manager for macOS, Windows and Linux, with keep-awake sessions and clipboard history. Pure Rust - no Electron, no browser engine, ~1.6 MB, local-only." />
+<meta name="keywords" content="clipboard manager, menu bar app, menubar app, clipboard history, macOS clipboard manager, Windows clipboard manager, Linux clipboard manager, keep awake, caffeine, cross-platform, Rust, lightweight, klipa" />
+<meta name="author" content="Petros Dhespollari" />
+<link rel="canonical" href="https://klipa.peterdsp.dev/" />
 <link rel="icon" type="image/png" href="assets/favicon.png" />
-<meta property="og:title" content="klipa" />
-<meta property="og:description" content="A small, fast, cross-platform clipboard manager." />
+<meta property="og:type" content="website" />
+<meta property="og:site_name" content="klipa" />
+<meta property="og:title" content="klipa - menu bar clipboard manager for macOS, Windows & Linux" />
+<meta property="og:description" content="A tiny, fast menu bar clipboard manager with keep-awake sessions. macOS, Windows & Linux. Pure Rust, ~1.6 MB, local-only." />
 <meta property="og:image" content="assets/favicon.png" />
 <meta property="og:url" content="https://klipa.peterdsp.dev" />
+<meta name="twitter:card" content="summary" />
+<meta name="twitter:title" content="klipa - menu bar clipboard manager for macOS, Windows & Linux" />
+<meta name="twitter:description" content="A tiny, fast menu bar clipboard manager with keep-awake sessions. macOS, Windows & Linux. Pure Rust, ~1.6 MB, local-only." />
+<meta name="twitter:image" content="assets/favicon.png" />
 <meta name="theme-color" content="#0e0f12" />
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "klipa",
+  "description": "A tiny, fast menu bar clipboard manager for macOS, Windows and Linux, with clipboard history and keep-awake sessions. Pure Rust, no Electron, ~1.6 MB, local-only.",
+  "applicationCategory": "UtilitiesApplication",
+  "operatingSystem": "macOS, Windows, Linux",
+  "url": "https://klipa.peterdsp.dev",
+  "downloadUrl": "https://klipa.peterdsp.dev",
+  "softwareVersion": "0.4.3",
+  "offers": { "@type": "Offer", "price": "1.99", "priceCurrency": "EUR" },
+  "author": { "@type": "Person", "name": "Petros Dhespollari", "url": "https://peterdsp.dev" }
+}
+</script>
 <style>
   :root{
     --bg:#0e0f12; --bg2:#15171b; --card:rgba(255,255,255,.05);
@@ -269,7 +293,7 @@
       <b></b><b></b><b></b>
     </div>
     <h1>klipa</h1>
-    <p class="tag">A small, fast, cross-platform clipboard manager. Pure Rust - no WebView, no JavaScript runtime.</p>
+    <p class="tag">A tiny, fast <strong>menu bar clipboard manager</strong> for <strong>macOS, Windows &amp; Linux</strong> - with keep-awake sessions. Pure Rust, no WebView, no JavaScript runtime.</p>
     <div class="pills">
       <span class="pill">~10&nbsp;MB RAM</span>
       <span class="pill">1.6&nbsp;MB binary</span>
