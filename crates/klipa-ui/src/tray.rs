@@ -98,19 +98,22 @@ impl Tray {
         }
     }
 
-    /// Swap the tray icon between the clipboard glyph and a transparent
-    /// stand-in that occupies as little menu bar space as possible.
-    /// Used when the user picks a date/temperature display: only the
-    /// text should show, not "icon + text" side by side.
+    /// Show or hide the clipboard glyph next to the tray title.
+    /// When the user picks a date/temperature display, we clear the
+    /// image entirely so only the text renders - no icon slot, no
+    /// leading padding. On macOS this maps to `button.setImage(nil)`.
     pub fn set_icon_visible(&self, show_glyph: bool) {
-        let icon = if show_glyph { clipboard_glyph() } else { blank_icon() };
-        let _ = self.icon.set_icon(Some(icon));
-        // `set_icon` re-sets the NSImage with template=false (hardcoded in the
-        // tray-icon crate), which drops the template flag from `new()` and makes
-        // the glyph render as fixed black — invisible on dark menu bars. Re-apply
-        // template so macOS keeps tinting it (black on light, white on dark).
-        #[cfg(target_os = "macos")]
-        self.icon.set_icon_as_template(true);
+        if show_glyph {
+            let _ = self.icon.set_icon(Some(clipboard_glyph()));
+            // `set_icon` re-sets the NSImage with template=false (hardcoded in
+            // the tray-icon crate), which drops the template flag from `new()`
+            // and makes the glyph render as fixed black - invisible on dark
+            // menu bars. Re-apply template so macOS keeps tinting it.
+            #[cfg(target_os = "macos")]
+            self.icon.set_icon_as_template(true);
+        } else {
+            let _ = self.icon.set_icon(None);
+        }
     }
 
     /// Text shown next to the menubar icon (date, temperature, ...).
@@ -379,14 +382,6 @@ pub fn poll_menu_events() -> Vec<MenuId> {
         out.push(ev.id);
     }
     out
-}
-
-/// A 1x1 fully transparent icon. Used when the menu bar mode wants
-/// only text (date, temperature, or both) and the clipboard glyph
-/// would otherwise waste space next to it. The OS still reserves a
-/// tiny slot for the icon, but nothing visible ends up there.
-fn blank_icon() -> Icon {
-    Icon::from_rgba(vec![0, 0, 0, 0], 1, 1).expect("blank tray icon")
 }
 
 /// Draw a 22x22 monochrome clipboard glyph in pure Rust (no asset).
