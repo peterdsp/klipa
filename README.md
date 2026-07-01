@@ -62,6 +62,11 @@ dropdown shows an *Unlock full version* item; buy a key, copy it, and
 click *Activate (paste license key)*. The key is verified once online and
 then works offline.
 
+The trial start is also mirrored to the OS keychain (macOS Keychain,
+Windows Credential Manager, Linux Secret Service), so uninstalling and
+reinstalling klipa does not reset the 7 days - the app reads back the
+earliest known start on next launch.
+
 The **Mac App Store** build is a normal paid app - the store handles
 payment, so it has no trial or license key (that whole mechanism is
 compiled out). klipa is MIT-licensed, so the paywall only applies to the
@@ -74,18 +79,26 @@ window. It lives as a clipboard glyph in the system status bar.
 
 **Click the menubar icon** and your recent clipboard entries drop down.
 Click an entry to copy it back, ready to paste. Below the history the
-menu has "Clear history", a **Keep awake** submenu, "Hide menubar icon",
-and "Quit klipa". That native dropdown is the whole UI - no separate
-window, no GPU renderer.
+menu has "Clear history", a **Keep awake** submenu, a **Menu bar**
+display submenu, and "Quit klipa". That native dropdown is the whole UI
+- no separate window, no GPU renderer.
 
 History is stored in a **plain local file** under your data dir. It
 never leaves your device - nothing is logged, uploaded, or sent
-anywhere. klipa keeps the most recent 200 entries.
+anywhere. klipa keeps the most recent 200 entries by default; the cap
+is configurable via `settings.json`.
+
+### First launch
+
+The very first time klipa starts, it opens
+[klipa.peterdsp.dev/welcome.html](https://klipa.peterdsp.dev/welcome.html)
+in your default browser - a 2-minute walkthrough of the menu bar UI,
+the display modes, and the trial. Subsequent launches are silent.
 
 ### Keep awake
 
-An Amphetamine-style keep-awake session stops your machine from idle
-sleeping. Open **Keep awake** and pick a duration - *Indefinitely*, or
+A keep-awake session stops your machine from idle sleeping. Open
+**Keep awake** and pick a duration - *Indefinitely*, or
 5 / 15 / 30 minutes, 1 / 2 / 5 hours - and klipa holds the system awake
 until the timer elapses or you choose **End current session**. Toggle
 **Allow display sleep** to let the screen sleep while the system stays
@@ -102,12 +115,6 @@ It uses each OS's native mechanism, with no extra dependency:
 On Linux the idle inhibitor covers the whole idle path (screen blank +
 auto-suspend together), so **Allow display sleep** has no separate
 effect there.
-
-### Hide menubar icon
-
-**Hide menubar icon** removes klipa from the status bar while it keeps
-running and watching the clipboard. Relaunch klipa to bring the icon
-back.
 
 ### Menu bar display
 
@@ -179,7 +186,7 @@ Inner layers never import outer layers. `klipa-core` has zero of:
 - History kept in a **single local file** on your device, last 200 entries
 - Native **menubar dropdown** of recent copies; click to paste (`tray-icon`)
 - **Keep-awake sessions** - timed or indefinite, native on macOS / Windows / Linux
-- **Hide menubar icon** while klipa keeps running in the background
+- **First-launch walkthrough** in the browser (2 min, then never again)
 - **Menu bar display**: icon only (default), date, temperature, or both
 - **Auto-update notice**: daily background check for a newer release; shows an "Update to vX.Y.Z" item in the menu (direct-download builds only - App Store handles its own updates)
 - **7-day free trial**, then a one-time **€1.99** unlock (App Store build excluded)

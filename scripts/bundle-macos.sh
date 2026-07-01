@@ -36,10 +36,17 @@ else
   cargo build --release -p klipa-ui ${FEAT_FLAG[@]+"${FEAT_FLAG[@]}"}; BIN="target/release/klipa"
 fi
 
-echo "==> assembling $APP"
+VERSION="$(grep -m1 '^version' Cargo.toml | sed -E 's/.*"([^"]+)".*/\1/')"
+
+echo "==> assembling $APP (version $VERSION)"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
-cp packaging/macos/Info.plist          "$APP/Contents/Info.plist"
+# Template the workspace version into CFBundleShortVersionString + CFBundleVersion
+# so the committed Info.plist doesn't have to be kept in sync by hand.
+sed -E \
+    -e '/<key>CFBundleShortVersionString<\/key>/,/<\/string>/ s|<string>[^<]*</string>|<string>'"$VERSION"'</string>|' \
+    -e '/<key>CFBundleVersion<\/key>/,/<\/string>/ s|<string>[^<]*</string>|<string>'"$VERSION"'</string>|' \
+    packaging/macos/Info.plist > "$APP/Contents/Info.plist"
 cp packaging/icons/klipa.icns          "$APP/Contents/Resources/klipa.icns"
 cp "$BIN"                              "$APP/Contents/MacOS/klipa"
 chmod +x "$APP/Contents/MacOS/klipa"

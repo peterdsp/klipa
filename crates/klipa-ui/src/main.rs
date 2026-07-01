@@ -30,11 +30,10 @@ use winit::event::WindowEvent;
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::window::WindowId;
 
-/// Keep at most this many entries (newest first). Plenty for a
-/// menubar dropdown; the file stays small.
-const HISTORY_CAP: usize = 200;
 /// How often the loop wakes to drain menu clicks / refresh the menu.
 const TICK: Duration = Duration::from_millis(200);
+/// Where the first-run walkthrough lives.
+const WELCOME_URL: &str = "https://klipa.peterdsp.dev/welcome.html";
 
 struct Klipa {
     history: Arc<HistoryService>,
@@ -83,13 +82,16 @@ impl Klipa {
         }
     }
 
-    /// Refresh the tray title (date / temperature). Runs the network
-    /// call on the tokio blocking pool so the event loop never stalls.
+    /// Refresh the tray title (date / temperature) and swap the glyph
+    /// so the icon+text combo doesn't waste menu bar space. When any
+    /// text mode is on, the clipboard icon is hidden and only the
+    /// text shows.
     fn refresh_menubar_title(&mut self) {
         let Some(tray) = &self.tray else { return };
         let display = self.settings.menubar_display;
         let title = settings::menubar_title(display, &mut self.weather);
         tray.set_title(title.as_deref());
+        tray.set_icon_visible(title.is_none());
         self.menubar_refreshed = Instant::now();
     }
 
@@ -130,11 +132,6 @@ impl ApplicationHandler for Klipa {
                 tray::CLEAR_ID => {
                     let _ = self.rt.block_on(self.history.clear_unpinned());
                     self.rebuild_menu();
-                }
-                tray::HIDE_ICON_ID => {
-                    if let Some(tray) = &self.tray {
-                        tray.set_visible(false);
-                    }
                 }
                 tray::BUY_ID => {
                     self.license.open_purchase();
@@ -216,6 +213,24 @@ impl ApplicationHandler for Klipa {
     }
 }
 
+/// Open a URL with the OS default handler.
+fn open_url(url: &str) {
+    #[cfg(target_os = "macos")]
+    {
+        let _ = std::process::Command::new("open").arg(url).spawn();
+    }
+    #[cfg(target_os = "windows")]
+    {
+        let _ = std::process::Command::new("cmd")
+            .args(["/C", "start", "", url])
+            .spawn();
+    }
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        let _ = std::process::Command::new("xdg-open").arg(url).spawn();
+    }
+}
+
 fn main() {
     tracing_subscriber::fmt()
         .with_env_filter(
@@ -230,14 +245,30 @@ fn main() {
         .expect("tokio runtime");
     let handle = runtime.handle().clone();
 
+    // Load persisted settings first so we can seed HistoryService with
+    // the user's chosen cap.
+    let mut settings = settings::Settings::load();
+
     // Domain service backed by the local JSON file + arboard clipboard.
-    let history = handle.block_on(async {
-        let store = Arc::new(JsonStore::new().await.expect("storage init"));
-        let clipboard = Arc::new(ArboardClipboard::new());
-        let svc = Arc::new(HistoryService::new(store, clipboard, HISTORY_CAP));
-        svc.load().await.expect("history load");
-        svc
-    });
+    let history = {
+        let cap = settings.history_cap.max(1);
+        handle.block_on(async {
+            let store = Arc::new(JsonStore::new().await.expect("storage init"));
+            let clipboard = Arc::new(ArboardClipboard::new());
+            let svc = Arc::new(HistoryService::new(store, clipboard, cap));
+            svc.load().await.expect("history load");
+            svc
+        })
+    };
+
+    // First-launch welcome: open the walkthrough in the user's default
+    // browser and mark it done, so subsequent launches are silent. The
+    // page explains the menu bar UI, the display modes, and the trial.
+    if !settings.welcomed {
+        open_url(WELCOME_URL);
+        settings.welcomed = true;
+        settings.save();
+    }
 
     // Trial + license gate. Stamps the trial clock on first run, and
     // re-checks an activated key in the background if it's gone stale.
@@ -269,7 +300,7 @@ fn main() {
         license,
         locked,
         license_refreshed: Instant::now(),
-        settings: settings::Settings::load(),
+        settings,
         weather: weather::WeatherState::new(),
         menubar_refreshed: Instant::now(),
         updater: updater::UpdateState::new(),

@@ -82,14 +82,26 @@ mod imp {
     }
 
     impl License {
-        /// Load (or start) the trial. Stamps the trial clock on first run.
+        /// Load (or start) the trial. Stamps the trial clock on first
+        /// run, and mirrors that stamp into the OS keychain so a plain
+        /// "uninstall the app and delete the data folder" no longer
+        /// resets the 7 days: the next fresh install reads back the
+        /// keychain value and honours the original trial start.
         pub fn load() -> Self {
             let mut state: State = paths::license_file()
                 .and_then(|p| std::fs::read(p).ok())
                 .and_then(|b| serde_json::from_slice(&b).ok())
                 .unwrap_or_default();
+            // Merge in a keychain-backed trial start if it is older
+            // than whatever is on disk. This is what stops reinstalls.
+            let keyring_start = keyring_trial_start();
+            state.trial_started_at = earliest(state.trial_started_at, keyring_start);
             if state.trial_started_at.is_none() {
                 state.trial_started_at = Some(OffsetDateTime::now_utc());
+            }
+            // Push back to the keychain so a future reinstall picks it up.
+            if let Some(t) = state.trial_started_at {
+                write_keyring_trial_start(t);
             }
             let me = Self {
                 state,
@@ -201,6 +213,41 @@ mod imp {
                     let _ = std::fs::rename(&tmp, &path);
                 }
             }
+        }
+    }
+
+    /// Return the earlier of two optional timestamps. Used to prefer
+    /// whichever trial-start stamp (file vs keychain) is oldest, so
+    /// tampering with one always yields the honest date.
+    fn earliest(
+        a: Option<OffsetDateTime>,
+        b: Option<OffsetDateTime>,
+    ) -> Option<OffsetDateTime> {
+        match (a, b) {
+            (Some(x), Some(y)) => Some(if x < y { x } else { y }),
+            (x, y) => x.or(y),
+        }
+    }
+
+    const KEYRING_SERVICE: &str = "dev.peterdsp.klipa";
+    const KEYRING_ACCOUNT: &str = "trial_started_at";
+
+    /// Read the trial start from the OS keychain, if present.
+    fn keyring_trial_start() -> Option<OffsetDateTime> {
+        let entry = keyring::Entry::new(KEYRING_SERVICE, KEYRING_ACCOUNT).ok()?;
+        let s = entry.get_password().ok()?;
+        OffsetDateTime::parse(&s, &time::format_description::well_known::Rfc3339).ok()
+    }
+
+    /// Write (or overwrite) the trial start in the OS keychain. Best
+    /// effort: silently ignored if the platform keychain is unavailable
+    /// (e.g. headless Linux with no Secret Service running).
+    fn write_keyring_trial_start(t: OffsetDateTime) {
+        let Ok(entry) = keyring::Entry::new(KEYRING_SERVICE, KEYRING_ACCOUNT) else {
+            return;
+        };
+        if let Ok(s) = t.format(&time::format_description::well_known::Rfc3339) {
+            let _ = entry.set_password(&s);
         }
     }
 

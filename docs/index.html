@@ -128,8 +128,8 @@
   .mb-apple{width:12px;height:12px;background:currentColor;-webkit-mask:url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12.152 6.896c-.948 0-2.415-1.078-3.96-1.04-2.04.027-3.91 1.183-4.961 3.014-2.117 3.675-.546 9.103 1.519 12.09 1.013 1.454 2.208 3.09 3.792 3.039 1.52-.065 2.09-.987 3.935-.987 1.831 0 2.35.987 3.96.948 1.637-.026 2.676-1.48 3.676-2.948 1.156-1.688 1.636-3.325 1.662-3.415-.039-.013-3.182-1.221-3.22-4.857-.026-3.04 2.48-4.494 2.597-4.559-1.429-2.09-3.623-2.324-4.39-2.376-2-.156-3.675 1.09-4.61 1.09zM15.53 3.83c.843-1.012 1.4-2.427 1.245-3.83-1.207.052-2.662.805-3.532 1.818-.78.896-1.454 2.338-1.273 3.714 1.338.104 2.715-.688 3.559-1.701"/></svg>') center/contain no-repeat;mask:url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12.152 6.896c-.948 0-2.415-1.078-3.96-1.04-2.04.027-3.91 1.183-4.961 3.014-2.117 3.675-.546 9.103 1.519 12.09 1.013 1.454 2.208 3.09 3.792 3.039 1.52-.065 2.09-.987 3.935-.987 1.831 0 2.35.987 3.96.948 1.637-.026 2.676-1.48 3.676-2.948 1.156-1.688 1.636-3.325 1.662-3.415-.039-.013-3.182-1.221-3.22-4.857-.026-3.04 2.48-4.494 2.597-4.559-1.429-2.09-3.623-2.324-4.39-2.376-2-.156-3.675 1.09-4.61 1.09zM15.53 3.83c.843-1.012 1.4-2.427 1.245-3.83-1.207.052-2.662.805-3.532 1.818-.78.896-1.454 2.338-1.273 3.714 1.338.104 2.715-.688 3.559-1.701"/></svg>') center/contain no-repeat;}
   .mb-app{font-weight:700}
   .mb-menu{color:#a0a5b0}
-  .mb-right{display:flex;align-items:center;gap:12px}
-  .mb-icon{opacity:.8;font-size:12px}
+  .mb-right{display:flex;align-items:center;gap:10px;color:#e0e3ea}
+  .mb-svg{display:block;color:#e0e3ea}
   .mb-tray{
     display:inline-flex;align-items:center;justify-content:center;
     width:22px;height:22px;border-radius:6px;position:relative;
@@ -196,9 +196,11 @@
     box-shadow:0 0 0 1px rgba(110,168,254,.15) inset,0 20px 50px rgba(59,130,246,.18);
   }
   .card.primary::before{
-    content:"You are on this platform";position:absolute;top:-11px;left:50%;transform:translateX(-50%);
+    content:"Your platform";position:absolute;top:-10px;left:50%;transform:translateX(-50%);
     background:linear-gradient(90deg,var(--accent),var(--accent2));font-size:11px;font-weight:600;
-    padding:3px 10px;border-radius:999px;color:#fff;letter-spacing:.02em;
+    padding:3px 12px;border-radius:999px;color:#fff;letter-spacing:.02em;
+    white-space:nowrap;line-height:1.35;
+    box-shadow:0 4px 12px rgba(59,130,246,.35);
   }
   .card{position:relative}
   .os{display:flex;align-items:center;gap:10px;font-weight:600;font-size:18px}
@@ -291,8 +293,25 @@
             <span class="mb-tray open">
               <img src="assets/icon.png" alt="" />
             </span>
-            <span class="mb-icon">🔋</span>
-            <span class="mb-icon">📶</span>
+            <!-- Battery: rounded rect + terminal + fill bar (SF-style) -->
+            <svg class="mb-svg" viewBox="0 0 26 12" width="24" height="12" aria-hidden="true">
+              <rect x=".5" y="1.5" width="22" height="9" rx="2.2" ry="2.2"
+                fill="none" stroke="currentColor" stroke-width="1" opacity=".55"/>
+              <rect x="24" y="4.5" width="1.6" height="3" rx=".7" ry=".7" fill="currentColor" opacity=".55"/>
+              <rect x="2" y="3" width="14" height="6" rx="1.2" ry="1.2" fill="currentColor" opacity=".95"/>
+            </svg>
+            <!-- Wi-Fi: three-arc fan -->
+            <svg class="mb-svg" viewBox="0 0 18 12" width="16" height="12" aria-hidden="true">
+              <path d="M9 11.4a1.1 1.1 0 100-2.2 1.1 1.1 0 000 2.2z" fill="currentColor"/>
+              <path d="M4.3 7.2a6.7 6.7 0 019.4 0" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+              <path d="M1.5 4.5a10.8 10.8 0 0115 0" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+            </svg>
+            <!-- Control Center pill -->
+            <svg class="mb-svg" viewBox="0 0 16 10" width="16" height="12" aria-hidden="true">
+              <rect x="1" y="1" width="14" height="8" rx="2.6" ry="2.6" fill="none" stroke="currentColor" stroke-width="1" opacity=".55"/>
+              <circle cx="5" cy="5" r="1.6" fill="currentColor" opacity=".7"/>
+              <circle cx="11" cy="5" r="1.6" fill="currentColor" opacity=".9"/>
+            </svg>
             <span class="mb-time">10:42</span>
           </div>
         </div>
@@ -367,7 +386,7 @@
       <div class="feat"><h3>Ultralight</h3><p>A 1.3&nbsp;MB binary using ~10&nbsp;MB RAM - no Electron, no browser engine, no GPU renderer.</p></div>
       <div class="feat"><h3>Menubar dropdown</h3><p>Click the menubar icon and your recent copies drop down. Click one to paste it. That is the whole UI.</p></div>
       <div class="feat"><h3>Local-only, private</h3><p>Your copies stay in one local file on your device. Nothing is logged, uploaded, or sent anywhere - klipa has no servers and makes no network connections.</p></div>
-      <div class="feat"><h3>Keep-awake sessions</h3><p>Amphetamine-style: stop your machine from sleeping for 5 min to 5 hours, or indefinitely. Native on all three OSes.</p></div>
+      <div class="feat"><h3>Keep-awake sessions</h3><p>Stop your machine from sleeping for 5 min to 5 hours, or indefinitely. Native on all three OSes.</p></div>
       <div class="feat"><h3>Truly cross-platform</h3><p>The same Rust core and native menubar dropdown on macOS, Windows, and Linux.</p></div>
       <div class="feat"><h3>Open source</h3><p>MIT licensed. Read it, build it, ship it. <a href="https://github.com/peterdsp/klipa" style="color:var(--accent2)">View on GitHub</a>.</p></div>
     </div>

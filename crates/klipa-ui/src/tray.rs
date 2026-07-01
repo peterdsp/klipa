@@ -30,8 +30,6 @@ pub const AWAKE_END_ID: &str = "__klipa_awake_end";
 pub const AWAKE_DISPLAY_ID: &str = "__klipa_awake_display";
 /// Prefix for "start a session of N seconds" items; 0 = indefinitely.
 pub const AWAKE_START_PREFIX: &str = "__klipa_awake_start:";
-/// Hide the menubar icon for this session.
-pub const HIDE_ICON_ID: &str = "__klipa_hide_icon";
 /// Open the purchase page / activate a license key.
 pub const BUY_ID: &str = "__klipa_buy";
 pub const ACTIVATE_ID: &str = "__klipa_activate";
@@ -90,11 +88,13 @@ impl Tray {
         }
     }
 
-    /// Show or hide the menubar icon. Hiding it leaves klipa running
-    /// (and still watching the clipboard) with no visible UI; relaunch
-    /// klipa to bring the icon back.
-    pub fn set_visible(&self, visible: bool) {
-        let _ = self.icon.set_visible(visible);
+    /// Swap the tray icon between the clipboard glyph and a transparent
+    /// stand-in that occupies as little menu bar space as possible.
+    /// Used when the user picks a date/temperature display: only the
+    /// text should show, not "icon + text" side by side.
+    pub fn set_icon_visible(&self, show_glyph: bool) {
+        let icon = if show_glyph { clipboard_glyph() } else { blank_icon() };
+        let _ = self.icon.set_icon(Some(icon));
     }
 
     /// Text shown next to the menubar icon (date, temperature, ...).
@@ -186,7 +186,6 @@ impl Tray {
                 None,
             ));
         }
-        let _ = menu.append(&MenuItem::with_id(HIDE_ICON_ID, "Hide menubar icon", true, None));
         let _ = menu.append(&MenuItem::with_id(QUIT_ID, "Quit klipa", true, None));
         self.icon.set_menu(Some(Box::new(menu)));
     }
@@ -236,7 +235,6 @@ fn paywall_menu(price: &str, notice: Option<&str>) -> Menu {
         let _ = menu.append(&MenuItem::new(msg, false, None));
     }
     let _ = menu.append(&PredefinedMenuItem::separator());
-    let _ = menu.append(&MenuItem::with_id(HIDE_ICON_ID, "Hide menubar icon", true, None));
     let _ = menu.append(&MenuItem::with_id(QUIT_ID, "Quit klipa", true, None));
     menu
 }
@@ -345,6 +343,14 @@ pub fn poll_menu_events() -> Vec<MenuId> {
         out.push(ev.id);
     }
     out
+}
+
+/// A 1x1 fully transparent icon. Used when the menu bar mode wants
+/// only text (date, temperature, or both) and the clipboard glyph
+/// would otherwise waste space next to it. The OS still reserves a
+/// tiny slot for the icon, but nothing visible ends up there.
+fn blank_icon() -> Icon {
+    Icon::from_rgba(vec![0, 0, 0, 0], 1, 1).expect("blank tray icon")
 }
 
 /// Draw a 22x22 monochrome clipboard glyph in pure Rust (no asset).
