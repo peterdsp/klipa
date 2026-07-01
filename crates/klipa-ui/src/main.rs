@@ -78,6 +78,7 @@ impl Klipa {
                 notice.as_deref(),
                 self.settings.menubar_display,
                 update.as_deref(),
+                self.settings.dropdown_items,
             );
         }
     }
@@ -102,6 +103,15 @@ impl Klipa {
         self.settings.menubar_display = mode;
         self.settings.save();
         self.refresh_menubar_title();
+        self.rebuild_menu();
+    }
+
+    fn set_dropdown_items(&mut self, count: usize) {
+        if self.settings.dropdown_items == count {
+            return;
+        }
+        self.settings.dropdown_items = count;
+        self.settings.save();
         self.rebuild_menu();
     }
 }
@@ -144,6 +154,9 @@ impl ApplicationHandler for Klipa {
                 tray::MENUBAR_DATE_ID => self.set_menubar_display(settings::MenubarDisplay::Date),
                 tray::MENUBAR_TEMP_ID => self.set_menubar_display(settings::MenubarDisplay::Temperature),
                 tray::MENUBAR_BOTH_ID => self.set_menubar_display(settings::MenubarDisplay::Both),
+                other if tray::parse_show_count(other).is_some() => {
+                    self.set_dropdown_items(tray::parse_show_count(other).unwrap());
+                }
                 tray::UPDATE_ID => self.updater.trigger(),
                 tray::AWAKE_END_ID => {
                     self.awake.end();

@@ -37,6 +37,11 @@ impl MenubarDisplay {
 /// Legacy setting, but configurable so power users can bump it.
 pub const DEFAULT_HISTORY_CAP: usize = 200;
 
+/// How many entries the dropdown shows when you click the menu bar icon.
+/// This is what the user actually sees; `history_cap` above is how many
+/// are *remembered*. Kept small by default so the native menu stays snappy.
+pub const DEFAULT_DROPDOWN_ITEMS: usize = 25;
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Settings {
     #[serde(default)]
@@ -47,6 +52,9 @@ pub struct Settings {
     /// How many clipboard entries to remember.
     #[serde(default = "default_history_cap")]
     pub history_cap: usize,
+    /// How many entries to show in the dropdown when clicked.
+    #[serde(default = "default_dropdown_items")]
+    pub dropdown_items: usize,
 }
 
 impl Default for Settings {
@@ -55,8 +63,13 @@ impl Default for Settings {
             menubar_display: MenubarDisplay::default(),
             welcomed: false,
             history_cap: DEFAULT_HISTORY_CAP,
+            dropdown_items: DEFAULT_DROPDOWN_ITEMS,
         }
     }
+}
+
+fn default_dropdown_items() -> usize {
+    DEFAULT_DROPDOWN_ITEMS
 }
 
 fn default_history_cap() -> usize {

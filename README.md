@@ -80,8 +80,9 @@ window. It lives as a clipboard glyph in the system status bar.
 **Click the menubar icon** and your recent clipboard entries drop down.
 Click an entry to copy it back, ready to paste. Below the history the
 menu has "Clear history", a **Keep awake** submenu, a **Menu bar**
-display submenu, and "Quit klipa". That native dropdown is the whole UI
-- no separate window, no GPU renderer.
+display submenu, a **Show in dropdown** submenu (list 10 / 25 / 50 / 100
+entries), and "Quit klipa". That native dropdown is the whole UI - no
+separate window, no GPU renderer.
 
 History is stored in a **plain local file** under your data dir. It
 never leaves your device - nothing is logged, uploaded, or sent
@@ -188,6 +189,8 @@ Inner layers never import outer layers. `klipa-core` has zero of:
 - **Keep-awake sessions** - timed or indefinite, native on macOS / Windows / Linux
 - **First-launch walkthrough** in the browser (2 min, then never again)
 - **Menu bar display**: icon only (default), date, temperature, or both
+- **Configurable dropdown size** (10 / 25 / 50 / 100 entries), set in-app
+- **First-run welcome guide** + reinstall-proof keychain trial (all OSes)
 - **Auto-update notice**: daily background check for a newer release; shows an "Update to vX.Y.Z" item in the menu (direct-download builds only - App Store handles its own updates)
 - **7-day free trial**, then a one-time **€1.99** unlock (App Store build excluded)
 - Frontmost-app capture per OS via `active-win-pos-rs`
