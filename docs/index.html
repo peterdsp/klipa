@@ -10,75 +10,262 @@
 <meta property="og:description" content="A small, fast, cross-platform clipboard manager." />
 <meta property="og:image" content="assets/favicon.png" />
 <meta property="og:url" content="https://klipa.peterdsp.dev" />
-<meta name="theme-color" content="#15171b" />
+<meta name="theme-color" content="#0e0f12" />
 <style>
   :root{
     --bg:#0e0f12; --bg2:#15171b; --card:rgba(255,255,255,.05);
     --stroke:rgba(255,255,255,.10); --text:#eceef2; --muted:#9aa3af;
-    --accent:#3b82f6; --accent2:#6ea8fe; --radius:18px;
+    --accent:#3b82f6; --accent2:#6ea8fe; --gold:#f0c674; --radius:18px;
   }
   *{box-sizing:border-box;margin:0;padding:0}
   html{scroll-behavior:smooth}
   body{
     font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
     color:var(--text);background:var(--bg);line-height:1.55;
-    background-image:radial-gradient(1100px 600px at 50% -10%,rgba(59,130,246,.18),transparent 60%);
     -webkit-font-smoothing:antialiased;
+    overflow-x:hidden;
+    position:relative;
   }
   a{color:inherit}
-  .wrap{max-width:980px;margin:0 auto;padding:0 22px}
-  header{padding:84px 0 48px;text-align:center}
-  .logo{width:120px;height:120px;filter:drop-shadow(0 18px 40px rgba(0,0,0,.5))}
-  h1{font-size:clamp(40px,8vw,68px);letter-spacing:-.03em;margin:18px 0 6px}
-  .tag{font-size:clamp(17px,3.5vw,22px);color:var(--muted);max-width:620px;margin:0 auto}
-  .pills{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:18px}
-  .pill{font-size:13px;color:var(--muted);border:1px solid var(--stroke);
-    background:var(--card);border-radius:999px;padding:5px 12px;backdrop-filter:blur(12px)}
+  .wrap{max-width:980px;margin:0 auto;padding:0 22px;position:relative;z-index:1}
 
-  /* download */
-  #download{padding:18px 0 40px}
-  .ver{text-align:center;color:var(--muted);font-size:14px;margin-bottom:20px}
+  /* ───── animated aurora background ───── */
+  .aurora{
+    position:fixed;inset:-20%;z-index:-2;pointer-events:none;filter:blur(80px);opacity:.55;
+  }
+  .aurora span{
+    position:absolute;border-radius:50%;mix-blend-mode:screen;
+    animation:drift 24s ease-in-out infinite alternate;
+  }
+  .aurora .a1{width:520px;height:520px;left:8%;top:-8%;background:#3b82f6;}
+  .aurora .a2{width:460px;height:460px;right:5%;top:12%;background:#6ea8fe;animation-delay:-8s}
+  .aurora .a3{width:420px;height:420px;left:30%;top:40%;background:#f0c674;opacity:.5;animation-delay:-14s}
+  @keyframes drift{
+    0%  {transform:translate(0,0) scale(1)}
+    50% {transform:translate(-4%,3%) scale(1.08)}
+    100%{transform:translate(6%,-4%) scale(.95)}
+  }
+
+  /* ───── twinkling stars ───── */
+  .stars{position:fixed;inset:0;z-index:-1;pointer-events:none;overflow:hidden}
+  .stars i{
+    position:absolute;width:2px;height:2px;background:#fff;border-radius:50%;
+    box-shadow:0 0 6px rgba(255,255,255,.7);
+    animation:twinkle var(--d,4s) ease-in-out infinite;
+    animation-delay:var(--t,0s);opacity:0;
+  }
+  @keyframes twinkle{
+    0%,100%{opacity:0;transform:scale(.4)}
+    50%{opacity:var(--o,.7);transform:scale(1)}
+  }
+  @media(prefers-reduced-motion:reduce){
+    .aurora span,.stars i,.logo,.pill,.btn::after{animation:none!important}
+  }
+
+  /* ───── header / hero ───── */
+  header{padding:88px 0 32px;text-align:center}
+  .logo-wrap{position:relative;display:inline-block}
+  .logo{
+    width:132px;height:132px;
+    filter:drop-shadow(0 22px 45px rgba(0,0,0,.55)) drop-shadow(0 0 30px rgba(110,168,254,.25));
+    animation:float 6s ease-in-out infinite;
+    transition:transform .4s cubic-bezier(.2,.8,.2,1);
+    cursor:pointer;
+  }
+  .logo:hover{transform:scale(1.06) rotate(-3deg)}
+  @keyframes float{
+    0%,100%{transform:translateY(0)}
+    50%{transform:translateY(-10px)}
+  }
+  /* sparkle around the moon in the icon */
+  .logo-wrap b{
+    position:absolute;pointer-events:none;background:var(--gold);width:4px;height:4px;
+    border-radius:50%;box-shadow:0 0 10px 2px var(--gold);opacity:0;
+    animation:sparkle 3s ease-in-out infinite;
+  }
+  .logo-wrap b:nth-child(2){top:32%;right:14%;animation-delay:0s}
+  .logo-wrap b:nth-child(3){top:52%;right:8%;animation-delay:.9s;width:3px;height:3px}
+  .logo-wrap b:nth-child(4){top:60%;right:22%;animation-delay:1.8s;width:2px;height:2px}
+  @keyframes sparkle{
+    0%,100%{opacity:0;transform:scale(0)}
+    50%    {opacity:1;transform:scale(1)}
+  }
+
+  h1{
+    font-size:clamp(44px,9vw,76px);letter-spacing:-.03em;margin:22px 0 8px;
+    background:linear-gradient(180deg,#ffffff 30%,#a9c3ff 100%);
+    -webkit-background-clip:text;background-clip:text;color:transparent;
+  }
+  .tag{font-size:clamp(17px,3.5vw,22px);color:var(--muted);max-width:640px;margin:0 auto}
+  .pills{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:22px}
+  .pill{
+    font-size:13px;color:var(--muted);border:1px solid var(--stroke);
+    background:var(--card);border-radius:999px;padding:6px 13px;backdrop-filter:blur(12px);
+    animation:pillIn .6s cubic-bezier(.2,.8,.2,1) both;
+  }
+  .pill:nth-child(1){animation-delay:.05s}
+  .pill:nth-child(2){animation-delay:.15s}
+  .pill:nth-child(3){animation-delay:.25s}
+  .pill:nth-child(4){animation-delay:.35s}
+  @keyframes pillIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+
+  /* ───── menubar demo ───── */
+  .demo{margin:56px auto 0;max-width:640px;perspective:1200px}
+  .demo-frame{
+    position:relative;border-radius:16px;overflow:hidden;
+    border:1px solid var(--stroke);background:linear-gradient(180deg,rgba(20,22,27,.9),rgba(14,15,18,.9));
+    box-shadow:0 30px 60px rgba(0,0,0,.55),0 0 0 1px rgba(255,255,255,.03) inset;
+    transform:rotateX(6deg);transition:transform .8s cubic-bezier(.2,.8,.2,1);
+  }
+  .demo-frame:hover{transform:rotateX(0deg)}
+  .mb-bar{
+    display:flex;align-items:center;justify-content:space-between;
+    height:26px;padding:0 12px;background:rgba(30,32,38,.7);
+    border-bottom:1px solid rgba(255,255,255,.06);
+    font-size:12px;color:#c9cdd6;
+  }
+  .mb-left{display:flex;align-items:center;gap:14px}
+  .mb-apple{width:12px;height:12px;background:currentColor;-webkit-mask:url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12.152 6.896c-.948 0-2.415-1.078-3.96-1.04-2.04.027-3.91 1.183-4.961 3.014-2.117 3.675-.546 9.103 1.519 12.09 1.013 1.454 2.208 3.09 3.792 3.039 1.52-.065 2.09-.987 3.935-.987 1.831 0 2.35.987 3.96.948 1.637-.026 2.676-1.48 3.676-2.948 1.156-1.688 1.636-3.325 1.662-3.415-.039-.013-3.182-1.221-3.22-4.857-.026-3.04 2.48-4.494 2.597-4.559-1.429-2.09-3.623-2.324-4.39-2.376-2-.156-3.675 1.09-4.61 1.09zM15.53 3.83c.843-1.012 1.4-2.427 1.245-3.83-1.207.052-2.662.805-3.532 1.818-.78.896-1.454 2.338-1.273 3.714 1.338.104 2.715-.688 3.559-1.701"/></svg>') center/contain no-repeat;mask:url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12.152 6.896c-.948 0-2.415-1.078-3.96-1.04-2.04.027-3.91 1.183-4.961 3.014-2.117 3.675-.546 9.103 1.519 12.09 1.013 1.454 2.208 3.09 3.792 3.039 1.52-.065 2.09-.987 3.935-.987 1.831 0 2.35.987 3.96.948 1.637-.026 2.676-1.48 3.676-2.948 1.156-1.688 1.636-3.325 1.662-3.415-.039-.013-3.182-1.221-3.22-4.857-.026-3.04 2.48-4.494 2.597-4.559-1.429-2.09-3.623-2.324-4.39-2.376-2-.156-3.675 1.09-4.61 1.09zM15.53 3.83c.843-1.012 1.4-2.427 1.245-3.83-1.207.052-2.662.805-3.532 1.818-.78.896-1.454 2.338-1.273 3.714 1.338.104 2.715-.688 3.559-1.701"/></svg>') center/contain no-repeat;}
+  .mb-app{font-weight:700}
+  .mb-menu{color:#a0a5b0}
+  .mb-right{display:flex;align-items:center;gap:12px}
+  .mb-icon{opacity:.8;font-size:12px}
+  .mb-tray{
+    display:inline-flex;align-items:center;justify-content:center;
+    width:22px;height:22px;border-radius:6px;position:relative;
+    transition:background .2s ease;
+  }
+  .mb-tray.open{background:rgba(110,168,254,.18)}
+  .mb-tray img{width:16px;height:16px;filter:drop-shadow(0 0 4px rgba(110,168,254,.5))}
+  .mb-time{font-weight:600;color:#e0e3ea}
+
+  .mb-dropdown{
+    position:absolute;top:26px;right:66px;width:260px;
+    background:rgba(24,26,32,.94);backdrop-filter:blur(24px);
+    border:1px solid rgba(255,255,255,.08);border-radius:10px;
+    box-shadow:0 20px 40px rgba(0,0,0,.5);
+    padding:4px;font-size:12px;color:#e0e3ea;
+    transform-origin:top right;
+    animation:mbOpen 12s ease-in-out infinite;
+  }
+  @keyframes mbOpen{
+    0%,3%       {opacity:0;transform:scale(.95) translateY(-4px);pointer-events:none}
+    5%,80%      {opacity:1;transform:none}
+    82%,100%    {opacity:0;transform:scale(.95) translateY(-4px)}
+  }
+  .mb-entry{
+    display:flex;align-items:center;gap:8px;
+    padding:6px 9px;border-radius:6px;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+    animation:mbHi 4s ease-in-out infinite;
+    animation-delay:calc(var(--i,0) * .8s);
+  }
+  @keyframes mbHi{
+    0%,72%,100% {background:transparent}
+    75%,80%     {background:linear-gradient(90deg,#3b82f6,#6ea8fe);color:#fff}
+  }
+  .mb-thumb{
+    flex:0 0 22px;height:22px;border-radius:4px;
+    background:linear-gradient(135deg,#3b82f6,#6ea8fe 40%,#f0c674);
+    box-shadow:0 0 0 1px rgba(255,255,255,.1) inset;
+  }
+  .mb-code{
+    font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px;color:#c9cdd6;
+  }
+  .mb-sep{height:1px;background:rgba(255,255,255,.08);margin:4px 6px}
+  .mb-action{color:#a0a5b0;animation:none}
+
+  .demo-caption{
+    text-align:center;color:var(--muted);font-size:13px;margin-top:14px;
+  }
+
+  /* ───── download ───── */
+  #download{padding:56px 0 40px}
+  .ver{text-align:center;color:var(--muted);font-size:14px;margin-bottom:22px}
   .ver b{color:var(--text)}
   .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
   @media(max-width:760px){.grid{grid-template-columns:1fr}}
   .card{
     border:1px solid var(--stroke);background:var(--card);border-radius:var(--radius);
     padding:22px;backdrop-filter:blur(16px);display:flex;flex-direction:column;gap:12px;
-    transition:transform .15s ease,border-color .15s ease;
+    transition:transform .25s cubic-bezier(.2,.8,.2,1),border-color .2s ease,box-shadow .25s ease;
   }
-  .card:hover{transform:translateY(-3px);border-color:rgba(110,168,254,.4)}
-  .card.primary{border-color:rgba(110,168,254,.45);box-shadow:0 0 0 1px rgba(110,168,254,.15) inset}
+  .card:hover{transform:translateY(-4px);border-color:rgba(110,168,254,.4);box-shadow:0 20px 40px rgba(59,130,246,.15)}
+  .card.primary{
+    border-color:rgba(110,168,254,.55);
+    box-shadow:0 0 0 1px rgba(110,168,254,.15) inset,0 20px 50px rgba(59,130,246,.18);
+  }
+  .card.primary::before{
+    content:"You are on this platform";position:absolute;top:-11px;left:50%;transform:translateX(-50%);
+    background:linear-gradient(90deg,var(--accent),var(--accent2));font-size:11px;font-weight:600;
+    padding:3px 10px;border-radius:999px;color:#fff;letter-spacing:.02em;
+  }
+  .card{position:relative}
   .os{display:flex;align-items:center;gap:10px;font-weight:600;font-size:18px}
   .os svg{width:24px;height:24px;fill:var(--text)}
   .card p{color:var(--muted);font-size:13px;min-height:34px}
   .btn{
+    position:relative;overflow:hidden;
     display:block;text-align:center;text-decoration:none;font-weight:600;font-size:15px;
-    padding:11px 14px;border-radius:12px;background:linear-gradient(180deg,var(--accent2),var(--accent));
-    color:#fff;border:none;cursor:pointer;transition:filter .15s ease}
-  .btn:hover{filter:brightness(1.08)}
-  .btn.sub{background:transparent;border:1px solid var(--stroke);color:var(--text);font-weight:500;font-size:13px;padding:8px 12px}
+    padding:12px 14px;border-radius:12px;background:linear-gradient(180deg,var(--accent2),var(--accent));
+    color:#fff;border:none;cursor:pointer;transition:filter .15s ease,transform .15s ease;
+  }
+  .btn:hover{filter:brightness(1.08);transform:translateY(-1px)}
+  .btn::after{
+    content:'';position:absolute;top:0;left:-100%;width:60%;height:100%;
+    background:linear-gradient(120deg,transparent,rgba(255,255,255,.35),transparent);
+    transform:skewX(-20deg);transition:left .7s ease;
+  }
+  .btn:hover::after{left:130%}
+  .btn.sub{background:transparent;border:1px solid var(--stroke);color:var(--text);font-weight:500;font-size:13px;padding:9px 12px}
+  .btn.sub::after{display:none}
   .alts{display:flex;flex-direction:column;gap:8px}
   .note{color:var(--muted);font-size:12px;text-align:center}
 
-  /* features */
-  section.features{padding:40px 0}
-  h2{font-size:28px;letter-spacing:-.02em;text-align:center;margin-bottom:26px}
+  /* ───── features ───── */
+  section.features{padding:56px 0}
+  h2{
+    font-size:32px;letter-spacing:-.02em;text-align:center;margin-bottom:32px;
+    background:linear-gradient(180deg,#ffffff 40%,#a9c3ff 100%);
+    -webkit-background-clip:text;background-clip:text;color:transparent;
+  }
   .feats{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
   @media(max-width:760px){.feats{grid-template-columns:1fr}}
-  .feat{border:1px solid var(--stroke);background:var(--card);border-radius:var(--radius);padding:18px;backdrop-filter:blur(12px)}
+  .feat{
+    border:1px solid var(--stroke);background:var(--card);border-radius:var(--radius);
+    padding:20px;backdrop-filter:blur(12px);transition:transform .25s ease,border-color .2s ease;
+  }
+  .feat:hover{transform:translateY(-3px);border-color:rgba(110,168,254,.35)}
   .feat h3{font-size:16px;margin-bottom:6px}
   .feat p{color:var(--muted);font-size:14px}
-  .kbd{font:600 12px ui-monospace,SFMono-Regular,Menlo,monospace;background:rgba(255,255,255,.08);
-    border:1px solid var(--stroke);border-radius:6px;padding:1px 6px}
+  .kbd{
+    font:600 12px ui-monospace,SFMono-Regular,Menlo,monospace;background:rgba(255,255,255,.08);
+    border:1px solid var(--stroke);border-radius:6px;padding:1px 6px;
+  }
+
+  /* scroll reveal */
+  .reveal{opacity:0;transform:translateY(24px);transition:opacity .8s ease,transform .8s cubic-bezier(.2,.8,.2,1)}
+  .reveal.in{opacity:1;transform:none}
 
   footer{padding:48px 0 60px;text-align:center;color:var(--muted);font-size:14px;border-top:1px solid var(--stroke);margin-top:30px}
   footer a{color:var(--accent2);text-decoration:none}
+  footer a:hover{text-decoration:underline}
 </style>
 </head>
 <body>
+
+<!-- animated background layers -->
+<div class="aurora" aria-hidden="true">
+  <span class="a1"></span><span class="a2"></span><span class="a3"></span>
+</div>
+<div class="stars" id="stars" aria-hidden="true"></div>
+
 <div class="wrap">
   <header>
-    <img class="logo" src="assets/icon.png" alt="klipa icon" />
+    <div class="logo-wrap">
+      <img class="logo" src="assets/icon.png" alt="klipa icon" />
+      <b></b><b></b><b></b>
+    </div>
     <h1>klipa</h1>
     <p class="tag">A small, fast, cross-platform clipboard manager. Pure Rust - no WebView, no JavaScript runtime.</p>
     <div class="pills">
@@ -87,10 +274,47 @@
       <span class="pill">Local-only, no network</span>
       <span class="pill">MIT licensed</span>
     </div>
+
+    <!-- menubar dropdown demo -->
+    <div class="demo" aria-hidden="true">
+      <div class="demo-frame">
+        <div class="mb-bar">
+          <div class="mb-left">
+            <span class="mb-apple"></span>
+            <span class="mb-app">Safari</span>
+            <span class="mb-menu">File</span>
+            <span class="mb-menu">Edit</span>
+            <span class="mb-menu">View</span>
+            <span class="mb-menu">Window</span>
+          </div>
+          <div class="mb-right">
+            <span class="mb-tray open">
+              <img src="assets/icon.png" alt="" />
+            </span>
+            <span class="mb-icon">🔋</span>
+            <span class="mb-icon">📶</span>
+            <span class="mb-time">10:42</span>
+          </div>
+        </div>
+        <div class="mb-dropdown">
+          <div class="mb-entry" style="--i:0"><span class="mb-code">brew install --cask klipa</span></div>
+          <div class="mb-entry" style="--i:1">https://github.com/peterdsp/klipa</div>
+          <div class="mb-entry" style="--i:2">
+            <span class="mb-thumb"></span>Screenshot&nbsp;2026-06-30.png
+          </div>
+          <div class="mb-entry" style="--i:3"><span class="mb-code">const KLIPA_VERSION = "0.2.0";</span></div>
+          <div class="mb-entry" style="--i:4">meet-me@klipa.dev</div>
+          <div class="mb-sep"></div>
+          <div class="mb-entry mb-action">Clear history</div>
+          <div class="mb-entry mb-action">Quit klipa</div>
+        </div>
+      </div>
+      <p class="demo-caption">Click the menu bar icon. Click any entry. Paste. That is the whole app.</p>
+    </div>
   </header>
 
-  <section id="download">
-    <p class="ver">Latest release: <b id="version">loading…</b></p>
+  <section id="download" class="reveal">
+    <p class="ver">Latest release: <b id="version">loading&hellip;</b></p>
     <div class="grid">
       <!-- macOS -->
       <div class="card" id="card-macos">
@@ -118,7 +342,7 @@
       <!-- Linux -->
       <div class="card" id="card-linux">
         <div class="os">
-          <svg viewBox="0 0 24 24"><path d="M12.504 0c-.155 0-.315.008-.48.021-4.226.333-3.105 4.807-3.17 6.298-.076 1.092-.3 1.953-1.05 3.02-.885 1.051-2.127 2.75-2.716 4.521-.278.832-.41 1.684-.287 2.489a.424.424 0 00-.11.135c-.26.268-.45.6-.663.839-.199.199-.485.267-.797.4-.313.136-.658.269-.864.68-.09.189-.136.394-.132.602 0 .199.027.4.055.536.058.399.116.728.04.97-.249.68-.28 1.145-.106 1.484.174.334.535.47.94.601.81.2 1.91.135 2.774.6.926.466 1.866.67 2.616.47.526-.116.97-.464 1.208-.946.587-.003 1.23-.269 2.26-.334.699-.058 1.574.267 2.577.2.025.134.063.198.114.333l.003.003c.391.778 1.113 1.132 1.884 1.071.771-.06 1.592-.536 2.257-1.306.631-.765 1.683-1.084 2.378-1.503.348-.199.629-.469.649-.853.023-.4-.2-.811-.714-1.376v-.097l-.003-.003c-.17-.2-.25-.535-.338-.926-.085-.401-.182-.786-.492-1.046h-.003c-.059-.054-.123-.067-.188-.135a.357.357 0 00-.19-.064c.431-1.278.264-2.55-.173-3.694-.533-1.41-1.465-2.638-2.175-3.483-.796-1.005-1.576-1.957-1.56-3.368.026-2.152.236-6.133-3.544-6.139zm.529 3.405h.013c.213 0 .396.062.584.198.19.135.33.332.438.533.105.259.158.459.166.724 0-.02.006-.04.006-.06v.105a.086.086 0 01-.004-.021l-.004-.024a1.807 1.807 0 01-.15.706.953.953 0 01-.213.335.71.71 0 00-.088-.042c-.104-.045-.198-.064-.284-.133a1.312 1.312 0 00-.22-.066c.05-.06.146-.133.183-.198.053-.128.082-.264.088-.402v-.02a1.21 1.21 0 00-.061-.4c-.045-.134-.101-.2-.183-.333-.084-.066-.167-.132-.267-.132h-.016c-.093 0-.176.03-.262.132a.8.8 0 00-.205.334 1.18 1.18 0 00-.09.4v.019c.002.089.008.179.02.267-.193-.067-.438-.135-.607-.202a1.635 1.635 0 01-.018-.2v-.02a1.772 1.772 0 01.15-.768c.082-.22.232-.406.43-.533a.985.985 0 01.594-.2zm-2.962.059h.036c.142 0 .27.048.399.135.146.129.264.288.344.465.09.199.14.4.153.667v.004c.007.134.006.2-.002.266v.08c-.03.007-.056.018-.083.024-.152.055-.274.135-.393.2.012-.09.013-.18.003-.267v-.015c-.012-.133-.04-.2-.082-.333a.613.613 0 00-.166-.267.248.248 0 00-.183-.064h-.021c-.071.006-.13.04-.186.132a.552.552 0 00-.12.27.944.944 0 00-.023.33v.015c.012.135.037.2.08.334.046.134.098.2.166.268.01.009.02.018.034.024-.07.057-.117.07-.176.136a.304.304 0 01-.131.068 2.62 2.62 0 01-.275-.402 1.772 1.772 0 01-.155-.667 1.759 1.759 0 01.08-.668 1.43 1.43 0 01.283-.535c.128-.133.26-.2.418-.2zm1.37 1.706c.332 0 .733.065 1.216.399.293.2.523.269 1.052.468h.003c.255.136.405.266.478.399v-.131a.571.571 0 01.016.47c-.123.31-.516.643-1.063.842v.002c-.268.135-.501.333-.775.465-.276.135-.588.292-1.012.267a1.139 1.139 0 01-.448-.067 3.566 3.566 0 01-.322-.198c-.195-.135-.363-.332-.612-.465v-.005h-.005c-.4-.246-.616-.512-.686-.71-.07-.268-.005-.47.193-.6.224-.135.38-.271.483-.336.104-.074.143-.102.176-.131h.002v-.003c.169-.202.436-.47.839-.601.139-.036.294-.065.466-.065zm2.8 2.142c.358 1.417 1.196 3.475 1.735 4.473.286.534.855 1.659 1.102 3.024.156-.005.33.018.513.064.646-1.671-.546-3.467-1.089-3.966-.22-.2-.232-.335-.123-.335.59.534 1.365 1.572 1.646 2.757.13.535.16 1.104.021 1.67.067.028.135.06.205.067 1.032.534 1.413.938 1.23 1.537v-.043c-.06-.003-.12 0-.18 0h-.016c.151-.467-.182-.825-1.065-1.224-.915-.4-1.646-.336-1.77.465-.008.043-.013.066-.018.135-.068.023-.139.053-.209.064-.43.268-.662.669-.793 1.187-.13.533-.17 1.156-.205 1.869v.003c-.02.334-.17.838-.319 1.35-1.5 1.072-3.58 1.538-5.348.334a2.645 2.645 0 00-.402-.533 1.45 1.45 0 00-.275-.333c.182 0 .338-.03.465-.067a.615.615 0 00.314-.334c.108-.267 0-.697-.345-1.163-.345-.467-.931-.995-1.788-1.521-.63-.4-.986-.87-1.15-1.396-.165-.534-.143-1.085-.015-1.645.245-1.07.873-2.11 1.274-2.763.107-.065.037.135-.408.974-.396.751-1.14 2.497-.122 3.854a8.123 8.123 0 01.647-2.876c.564-1.278 1.743-3.504 1.836-5.268.048.036.217.135.289.202.218.133.38.333.59.465.21.201.477.335.876.335.039.003.075.006.11.006.412 0 .73-.134.997-.268.29-.134.52-.334.74-.4h.005c.467-.135.835-.402 1.044-.7zm2.185 8.958c.037.6.343 1.245.882 1.377.588.134 1.434-.333 1.791-.765l.211-.01c.315-.007.577.01.847.268l.003.003c.208.199.305.53.391.876.085.4.154.78.409 1.066.486.527.645.906.636 1.14l.003-.007v.018l-.003-.012c-.015.262-.185.396-.498.595-.63.401-1.746.712-2.457 1.57-.618.737-1.37 1.14-2.036 1.191-.664.053-1.237-.2-1.574-.898l-.005-.003c-.21-.4-.12-1.025.056-1.69.176-.668.428-1.344.463-1.897.037-.714.076-1.335.195-1.814.12-.465.308-.797.641-.984l.045-.022zm-10.814.049h.01c.053 0 .105.005.157.014.376.055.706.333 1.023.752l.91 1.664.003.003c.243.533.754 1.064 1.189 1.637.434.598.77 1.131.729 1.57v.006c-.057.744-.48 1.148-1.125 1.294-.645.135-1.52.002-2.395-.464-.968-.536-2.118-.469-2.857-.602-.369-.066-.61-.2-.723-.4-.11-.2-.113-.602.123-1.23v-.004l.002-.003c.117-.334.03-.752-.027-1.118-.055-.401-.083-.71.043-.94.16-.334.396-.4.69-.533.294-.135.64-.202.915-.47h.002v-.002c.256-.268.445-.601.668-.838.19-.201.38-.336.663-.336zm7.159-9.074c-.435.201-.945.535-1.488.535-.542 0-.97-.267-1.28-.466-.154-.134-.28-.268-.373-.335-.164-.134-.144-.333-.074-.333.109.016.129.134.199.2.096.066.215.2.36.333.292.2.68.467 1.167.467.485 0 1.053-.267 1.398-.466.195-.135.445-.334.648-.467.156-.136.149-.267.279-.267.128.016.034.134-.147.332a8.097 8.097 0 01-.69.468zm-1.082-1.583V5.64c-.006-.02.013-.042.029-.05.074-.043.18-.027.26.004.063 0 .16.067.15.135-.006.049-.085.066-.135.066-.055 0-.092-.043-.141-.068-.052-.018-.146-.008-.163-.065zm-.551 0c-.02.058-.113.049-.166.066-.047.025-.086.068-.14.068-.05 0-.13-.02-.136-.068-.01-.066.088-.133.15-.133.08-.031.184-.047.259-.005.019.009.036.03.03.05v.02h.003z"/></svg>
+          <svg viewBox="0 0 24 24"><path d="M12.504 0c-.155 0-.315.008-.48.021-4.226.333-3.105 4.807-3.17 6.298-.076 1.092-.3 1.953-1.05 3.02-.885 1.051-2.127 2.75-2.716 4.521-.278.832-.41 1.684-.287 2.489a.424.424 0 00-.11.135c-.26.268-.45.6-.663.839-.199.199-.485.267-.797.4-.313.136-.658.269-.864.68-.09.189-.136.394-.132.602 0 .199.027.4.055.536.058.399.116.728.04.97-.249.68-.28 1.145-.106 1.484.174.334.535.47.94.601.81.2 1.91.135 2.774.6.926.466 1.866.67 2.616.47.526-.116.97-.464 1.208-.946.587-.003 1.23-.269 2.26-.334.699-.058 1.574.267 2.577.2.025.134.063.198.114.333l.003.003c.391.778 1.113 1.132 1.884 1.071.771-.06 1.592-.536 2.257-1.306.631-.765 1.683-1.084 2.378-1.503.348-.199.629-.469.649-.853.023-.4-.2-.811-.714-1.376v-.097l-.003-.003c-.17-.2-.25-.535-.338-.926-.085-.401-.182-.786-.492-1.046h-.003c-.059-.054-.123-.067-.188-.135a.357.357 0 00-.19-.064c.431-1.278.264-2.55-.173-3.694-.533-1.41-1.465-2.638-2.175-3.483-.796-1.005-1.576-1.957-1.56-3.368.026-2.152.236-6.133-3.544-6.139z"/></svg>
           Linux
         </div>
         <p>x86-64. AppImage runs anywhere; .deb / .rpm / tarball below.</p>
@@ -137,13 +361,13 @@
     </p>
   </section>
 
-  <section class="features">
+  <section class="features reveal">
     <h2>Why klipa</h2>
     <div class="feats">
       <div class="feat"><h3>Ultralight</h3><p>A 1.3&nbsp;MB binary using ~10&nbsp;MB RAM - no Electron, no browser engine, no GPU renderer.</p></div>
       <div class="feat"><h3>Menubar dropdown</h3><p>Click the menubar icon and your recent copies drop down. Click one to paste it. That is the whole UI.</p></div>
       <div class="feat"><h3>Local-only, private</h3><p>Your copies stay in one local file on your device. Nothing is logged, uploaded, or sent anywhere - klipa has no servers and makes no network connections.</p></div>
-      <div class="feat"><h3>Lives in the tray</h3><p>No dock icon, no taskbar clutter. klipa stays out of the way until you need it.</p></div>
+      <div class="feat"><h3>Keep-awake sessions</h3><p>Amphetamine-style: stop your machine from sleeping for 5 min to 5 hours, or indefinitely. Native on all three OSes.</p></div>
       <div class="feat"><h3>Truly cross-platform</h3><p>The same Rust core and native menubar dropdown on macOS, Windows, and Linux.</p></div>
       <div class="feat"><h3>Open source</h3><p>MIT licensed. Read it, build it, ship it. <a href="https://github.com/peterdsp/klipa" style="color:var(--accent2)">View on GitHub</a>.</p></div>
     </div>
@@ -158,11 +382,40 @@
 </footer>
 
 <script>
+  // ── Twinkling stars ─────────────────────────────────────────────────
+  // Sprinkle a handful of stars with randomised size, position, delay
+  // and duration. Skipped for users who prefer reduced motion.
+  if (!matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    const host = document.getElementById('stars');
+    const N = 40;
+    const frag = document.createDocumentFragment();
+    for (let i = 0; i < N; i++) {
+      const s = document.createElement('i');
+      const sz = Math.random() < 0.15 ? 3 : (Math.random() < 0.6 ? 2 : 1);
+      s.style.cssText =
+        `left:${(Math.random()*100).toFixed(2)}%;` +
+        `top:${(Math.random()*70).toFixed(2)}%;` +
+        `width:${sz}px;height:${sz}px;` +
+        `--t:${(Math.random()*6).toFixed(2)}s;` +
+        `--d:${(3 + Math.random()*4).toFixed(2)}s;` +
+        `--o:${(0.4 + Math.random()*0.55).toFixed(2)};`;
+      frag.appendChild(s);
+    }
+    host.appendChild(frag);
+  }
+
+  // ── Scroll-reveal ───────────────────────────────────────────────────
+  const io = new IntersectionObserver((entries) => {
+    for (const e of entries) if (e.isIntersecting) {
+      e.target.classList.add('in');
+      io.unobserve(e.target);
+    }
+  }, { threshold: 0.12 });
+  document.querySelectorAll('.reveal').forEach(el => io.observe(el));
+
+  // ── Downloads (unchanged) ───────────────────────────────────────────
   const REPO = "peterdsp/klipa";
   const RELEASES = "https://github.com/" + REPO + "/releases";
-  const latestDl = (name) => RELEASES + "/latest/download/" + name;
-
-  // Map each download button to a filename pattern (regex on asset name).
   const targets = {
     "dl-macos":    /macos.*\.pkg$/i,
     "dl-mas":      /mas.*\.pkg$/i,
@@ -199,15 +452,9 @@
       }
     })
     .catch(() => {
-      // API unavailable (e.g. before the first release): fall back to
-      // /latest/download/ URLs, which 404 gracefully until a release exists.
       document.getElementById("version").textContent = "see releases";
-      document.getElementById("dl-macos").href    = RELEASES;
-      document.getElementById("dl-windows").href  = RELEASES;
-      document.getElementById("dl-appimage").href = RELEASES;
-      document.getElementById("dl-deb").href      = RELEASES;
-      document.getElementById("dl-rpm").href      = RELEASES;
-      document.getElementById("dl-targz").href    = RELEASES;
+      ["dl-macos","dl-windows","dl-appimage","dl-deb","dl-rpm","dl-targz"]
+        .forEach(id => document.getElementById(id).href = RELEASES);
     });
 </script>
 </body>
