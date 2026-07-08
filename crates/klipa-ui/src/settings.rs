@@ -109,7 +109,7 @@ impl Settings {
 ///
 /// `weather` is only queried when the display mode actually wants a
 /// temperature, so a user in "Date" mode never hits the network.
-pub fn menubar_title(display: MenubarDisplay, weather: &mut WeatherState) -> Option<String> {
+pub fn menubar_title(display: MenubarDisplay, weather: &WeatherState) -> Option<String> {
     if matches!(display, MenubarDisplay::IconOnly) {
         return None;
     }
