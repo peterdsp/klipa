@@ -413,7 +413,7 @@
         <p>Universal (Apple Silicon + Intel). macOS 11+.</p>
         <a class="btn" id="dl-macos" href="#" target="_blank" rel="noopener">Download .pkg</a>
         <div class="alts">
-          <a class="btn sub" id="dl-mas" href="#" target="_blank" rel="noopener" hidden>Mac App Store</a>
+          <a class="btn sub" id="dl-mas" href="https://apps.apple.com/app/id6786092508" target="_blank" rel="noopener">Mac App Store</a>
         </div>
       </div>
 
@@ -506,9 +506,10 @@
   // ── Downloads (unchanged) ───────────────────────────────────────────
   const REPO = "peterdsp/klipa";
   const RELEASES = "https://github.com/" + REPO + "/releases";
+  // dl-mas is a static Mac App Store link (not a GitHub asset), so it is
+  // intentionally not listed here - the loop below must not touch it.
   const targets = {
     "dl-macos":    /macos.*\.pkg$/i,
-    "dl-mas":      /mas.*\.pkg$/i,
     "dl-windows":  /windows.*setup\.exe$/i,
     "dl-appimage": /\.AppImage$/i,
     "dl-deb":      /\.deb$/i,
@@ -538,7 +539,7 @@
         if (!el) continue;
         const hit = assets.find(a => rx.test(a.name));
         if (hit) { el.href = hit.browser_download_url; el.hidden = false; }
-        else { el.hidden = (id === "dl-mas"); el.href = RELEASES; }
+        else { el.hidden = false; el.href = RELEASES; }
       }
     })
     .catch(() => {
