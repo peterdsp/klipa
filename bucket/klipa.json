@@ -1,12 +1,12 @@
 {
-    "version": "0.4.3",
+    "version": "0.4.4",
     "description": "Small, fast, menubar clipboard manager with keep-awake",
     "homepage": "https://klipa.peterdsp.dev",
     "license": "MIT",
     "architecture": {
         "64bit": {
-            "url": "https://github.com/peterdsp/klipa/releases/download/v0.4.3/klipa-0.4.3-windows-x64.zip",
-            "hash": "b2c653092d611981a8428a62d9a757297e9572a0f8563ae95d40d74b0cd1ef17"
+            "url": "https://github.com/peterdsp/klipa/releases/download/v0.4.4/klipa-0.4.4-windows-x64.zip",
+            "hash": "f52c2379cf3549d083f71a936d63d1d5bc130731583475722746c45c08d88314"
         }
     },
     "bin": "klipa.exe",
