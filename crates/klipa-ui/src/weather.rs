@@ -10,89 +10,138 @@
 //! Location is cached for 24 h; temperature for 10 min, so a running
 //! app makes about 6 requests per hour when this mode is enabled.
 //!
+//! The network is never touched on the caller's thread: `label` only
+//! reads the shared cache and, when it is stale, kicks off a detached
+//! worker thread to refresh it. That keeps the menu bar responsive even
+//! on a slow or unreachable network, where each HTTP call can sit until
+//! its timeout.
+//!
 //! When the `weather` feature is off (e.g. a minimal build) the whole
 //! module compiles to a no-op that always returns `None`.
 
 #[cfg(feature = "weather")]
-use std::time::{Duration, Instant};
+use std::sync::Arc;
 
-/// Fetched-and-cached current temperature (integer °C).
+/// Handle to the temperature cache, refreshed off the main thread.
 pub struct WeatherState {
     #[cfg(feature = "weather")]
-    cache: imp::Cache,
+    shared: Arc<imp::Shared>,
 }
 
 impl WeatherState {
     pub fn new() -> Self {
         Self {
             #[cfg(feature = "weather")]
-            cache: imp::Cache::default(),
+            shared: Arc::new(imp::Shared::default()),
         }
     }
 
-    /// Return the current temperature label ("22°"), refreshing the
-    /// cache if it is stale. Non-blocking-ish: the HTTP calls each have
-    /// a short timeout and are made on the caller's thread, so this
-    /// runs on the tokio blocking pool via `spawn_blocking`.
+    /// Return the current temperature label ("22°") from cache without
+    /// ever blocking the caller. When the cached value is stale (or
+    /// absent) this spawns a background refresh and returns the last
+    /// known value in the meantime - `None` until the first fetch lands.
+    /// Cheap enough to call on every event-loop tick.
     ///
-    /// `_enabled` = whether the user's display mode wants weather.
-    /// When false we do not touch the cache at all.
-    pub fn label(&mut self, _enabled: bool) -> Option<String> {
+    /// `_enabled` = whether the user's display mode wants weather. When
+    /// false we neither read nor fetch.
+    pub fn label(&self, _enabled: bool) -> Option<String> {
         #[cfg(feature = "weather")]
         {
             if !_enabled {
                 return None;
             }
-            let temp = imp::current_temperature_c(&mut self.cache)?;
-            Some(format!("{}\u{00b0}", temp))
+            imp::current_label(&self.shared)
         }
         #[cfg(not(feature = "weather"))]
         {
+            let _ = _enabled;
             None
         }
     }
 }
 
-/// How long we wait for a single HTTP response. Kept short so a slow
-/// network never freezes the menu bar refresh tick.
-#[cfg(feature = "weather")]
-const HTTP_TIMEOUT: Duration = Duration::from_secs(5);
-
 #[cfg(feature = "weather")]
 mod imp {
-    use super::*;
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::{Arc, Mutex};
+    use std::time::{Duration, Instant};
+
+    /// How long we wait for a single HTTP response. Kept short so a slow
+    /// network never keeps a worker thread (or the retry cadence) stuck.
+    const HTTP_TIMEOUT: Duration = Duration::from_secs(5);
 
     const LOCATION_TTL: Duration = Duration::from_secs(24 * 60 * 60);
     const TEMP_TTL: Duration = Duration::from_secs(10 * 60);
+    /// Minimum spacing between fetch attempts, so a persistently failing
+    /// network (or a machine without `curl`) is retried at a sane pace
+    /// instead of once per event-loop tick.
+    const RETRY_MIN: Duration = Duration::from_secs(60);
 
     #[derive(Default)]
-    pub(super) struct Cache {
+    struct Cache {
         location: Option<((f64, f64), Instant)>,
         temperature: Option<(i16, Instant)>,
+        /// When the last fetch was *started*, to rate-limit retries.
+        last_attempt: Option<Instant>,
     }
 
-    /// Return a rounded-to-int Celsius temperature, refreshing either
-    /// leg of the cache when it goes stale.
-    pub(super) fn current_temperature_c(cache: &mut Cache) -> Option<i16> {
-        if let Some((t, at)) = cache.temperature {
-            if at.elapsed() < TEMP_TTL {
-                return Some(t);
-            }
+    #[derive(Default)]
+    pub(super) struct Shared {
+        cache: Mutex<Cache>,
+        /// True while a background fetch is in flight, so we never spawn
+        /// two at once.
+        fetching: AtomicBool,
+    }
+
+    /// Read the cached temperature label, spawning a background refresh
+    /// when the value is stale and none is already running. Never blocks
+    /// on the network.
+    pub(super) fn current_label(shared: &Arc<Shared>) -> Option<String> {
+        let mut cache = shared.cache.lock().unwrap();
+
+        let fresh = cache
+            .temperature
+            .is_some_and(|(_, at)| at.elapsed() < TEMP_TTL);
+
+        if !fresh
+            && !shared.fetching.load(Ordering::Acquire)
+            && cache.last_attempt.is_none_or(|a| a.elapsed() >= RETRY_MIN)
+        {
+            cache.last_attempt = Some(Instant::now());
+            shared.fetching.store(true, Ordering::Release);
+            spawn_refresh(Arc::clone(shared));
         }
-        let (lat, lon) = resolve_location(cache)?;
-        let t = fetch_temperature(lat, lon)?;
-        cache.temperature = Some((t, Instant::now()));
-        Some(t)
+
+        cache.temperature.map(|(t, _)| format!("{t}\u{00b0}"))
     }
 
-    fn resolve_location(cache: &mut Cache) -> Option<(f64, f64)> {
-        if let Some((coords, at)) = cache.location {
-            if at.elapsed() < LOCATION_TTL {
-                return Some(coords);
+    /// Refresh the location (if its 24 h TTL lapsed) then the
+    /// temperature on a detached worker thread. Network calls run
+    /// without the cache lock held; only the quick writes take it.
+    fn spawn_refresh(shared: Arc<Shared>) {
+        std::thread::spawn(move || {
+            let temp = resolve_location(&shared).and_then(|(lat, lon)| fetch_temperature(lat, lon));
+            if let Some(t) = temp {
+                if let Ok(mut cache) = shared.cache.lock() {
+                    cache.temperature = Some((t, Instant::now()));
+                }
+            }
+            shared.fetching.store(false, Ordering::Release);
+        });
+    }
+
+    fn resolve_location(shared: &Arc<Shared>) -> Option<(f64, f64)> {
+        if let Ok(cache) = shared.cache.lock() {
+            if let Some((coords, at)) = cache.location {
+                if at.elapsed() < LOCATION_TTL {
+                    return Some(coords);
+                }
             }
         }
         let coords = ip_geolocate()?;
-        cache.location = Some((coords, Instant::now()));
+        if let Ok(mut cache) = shared.cache.lock() {
+            cache.location = Some((coords, Instant::now()));
+        }
         Some(coords)
     }
 
