@@ -3,7 +3,9 @@
 //! Prevents the machine from idle-sleeping for a chosen duration (or
 //! indefinitely), using each OS's native mechanism:
 //!
-//! * **macOS**   - spawns the built-in `caffeinate` tool.
+//! * **macOS**   - an IOKit power assertion (`IOPMAssertionCreateWithName`),
+//!   the same public API the `caffeinate` tool wraps. Held in-process so
+//!   it works inside the App Sandbox (no subprocess to spawn).
 //! * **Windows** - `SetThreadExecutionState` (a single Win32 call).
 //! * **Linux**   - spawns `systemd-inhibit`, which holds an idle
 //!   inhibitor for as long as its child process is alive.
@@ -83,7 +85,9 @@ impl KeepAwake {
         if self.backend.is_none() {
             return false;
         }
-        // The OS helper finished on its own (e.g. timed `caffeinate`).
+        // A helper-process backend finished on its own (Linux's
+        // `systemd-inhibit sleep`); macOS/Windows report false here and
+        // are ended by the deadline below.
         if self.backend.as_mut().is_some_and(|b| b.finished()) {
             self.end();
             return true;
@@ -143,47 +147,116 @@ fn fmt_remaining(d: Duration) -> String {
 // returns `None` if the lock could not be acquired. `finished` reports
 // whether the OS released the lock on its own (timed helper exited).
 
-/// macOS: keep awake via the built-in `caffeinate` tool.
+/// macOS: keep awake via an IOKit power-management assertion. This is the
+/// public API that `caffeinate` itself wraps, called in-process so it
+/// works inside the App Sandbox with no subprocess and no entitlements.
+/// The assertion is held for the life of the `Backend` and released on
+/// `Drop`. There is no OS-side timer (the simple assertion API has none),
+/// so timed sessions are ended by `KeepAwake::poll` via the deadline,
+/// exactly like the Windows backend.
 #[cfg(target_os = "macos")]
 mod platform {
     use super::Duration;
-    use std::process::{Child, Command, Stdio};
+    use std::ffi::c_void;
 
-    pub struct Backend(Child);
+    /// `IOPMAssertionID` returned by the create call; passed back to
+    /// release. 0 is never a valid live assertion.
+    pub struct Backend(u32);
+
+    // kIOPMAssertionLevelOn.
+    const ASSERTION_LEVEL_ON: u32 = 255;
+    // kCFStringEncodingUTF8.
+    const UTF8: u32 = 0x0800_0100;
+    // kIOReturnSuccess.
+    const IO_SUCCESS: i32 = 0;
+
+    #[link(name = "CoreFoundation", kind = "framework")]
+    extern "C" {
+        fn CFStringCreateWithBytes(
+            alloc: *const c_void,
+            bytes: *const u8,
+            num_bytes: isize,
+            encoding: u32,
+            is_external_representation: u8,
+        ) -> *const c_void;
+        fn CFRelease(cf: *const c_void);
+    }
+
+    #[link(name = "IOKit", kind = "framework")]
+    extern "C" {
+        fn IOPMAssertionCreateWithName(
+            assertion_type: *const c_void,
+            assertion_level: u32,
+            assertion_name: *const c_void,
+            assertion_id: *mut u32,
+        ) -> i32;
+        fn IOPMAssertionRelease(assertion_id: u32) -> i32;
+    }
+
+    /// Build a CFString from a Rust `&str`. Caller must `CFRelease` it.
+    /// Returns null on failure.
+    fn cfstr(s: &str) -> *const c_void {
+        // SAFETY: valid pointer + length; UTF-8 is a supported encoding.
+        unsafe {
+            CFStringCreateWithBytes(std::ptr::null(), s.as_ptr(), s.len() as isize, UTF8, 0)
+        }
+    }
 
     impl Backend {
-        pub fn engage(duration: Option<Duration>, allow_display_sleep: bool) -> Option<Self> {
-            // -i: no idle system sleep, -m: no disk sleep,
-            // -d: no display sleep (dropped when display sleep is allowed).
-            let mut cmd = Command::new("/usr/bin/caffeinate");
-            cmd.arg("-i").arg("-m");
-            if !allow_display_sleep {
-                cmd.arg("-d");
-            }
-            if let Some(d) = duration {
-                cmd.arg("-t").arg(d.as_secs().max(1).to_string());
-            }
-            cmd.stdin(Stdio::null())
-                .stdout(Stdio::null())
-                .stderr(Stdio::null());
-            match cmd.spawn() {
-                Ok(child) => Some(Self(child)),
-                Err(e) => {
-                    tracing::warn!(?e, "failed to start caffeinate");
-                    None
+        pub fn engage(_duration: Option<Duration>, allow_display_sleep: bool) -> Option<Self> {
+            // PreventUserIdleDisplaySleep keeps the display (and therefore
+            // the system) awake; PreventUserIdleSystemSleep keeps the
+            // system awake but lets the display sleep.
+            let assertion_type = if allow_display_sleep {
+                "PreventUserIdleSystemSleep"
+            } else {
+                "PreventUserIdleDisplaySleep"
+            };
+            let type_str = cfstr(assertion_type);
+            let name_str = cfstr("klipa keep awake");
+            if type_str.is_null() || name_str.is_null() {
+                // SAFETY: each pointer is either a valid CFString or null.
+                unsafe {
+                    if !type_str.is_null() {
+                        CFRelease(type_str);
+                    }
+                    if !name_str.is_null() {
+                        CFRelease(name_str);
+                    }
                 }
+                return None;
+            }
+            let mut id: u32 = 0;
+            // SAFETY: both CFStrings are valid; `id` is a valid out-pointer.
+            let rc = unsafe {
+                IOPMAssertionCreateWithName(type_str, ASSERTION_LEVEL_ON, name_str, &mut id)
+            };
+            // SAFETY: the CFStrings we created are copied by the call above;
+            // release our references now.
+            unsafe {
+                CFRelease(type_str);
+                CFRelease(name_str);
+            }
+            if rc == IO_SUCCESS {
+                Some(Self(id))
+            } else {
+                tracing::warn!(rc, "IOPMAssertionCreateWithName failed");
+                None
             }
         }
 
         pub fn finished(&mut self) -> bool {
-            matches!(self.0.try_wait(), Ok(Some(_)))
+            // No OS timer; the deadline in KeepAwake drives ending.
+            false
         }
     }
 
     impl Drop for Backend {
         fn drop(&mut self) {
-            let _ = self.0.kill();
-            let _ = self.0.wait();
+            // SAFETY: releases the assertion we created in `engage`.
+            unsafe {
+                IOPMAssertionRelease(self.0);
+            }
         }
     }
 }
