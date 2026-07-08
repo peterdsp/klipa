@@ -128,10 +128,15 @@ Ed25519 license tied to their checkout email. The Mac App Store build has
 the `license` feature compiled OUT, so none of this applies there.
 
 Flow: Ko-fi shop sale -> Ko-fi webhook -> license server on the Pi
-(`licenses.peterdsp.dev`) signs a license and emails it -> the buyer
-copies that email into klipa and clicks **Activate** -> the app posts the
-email to `/activate`, gets the signed blob back, and verifies the Ed25519
-signature offline against the public key baked into `license.rs`.
+(`licenses.peterdsp.dev`) signs a license and emails it (inline text + a
+`.klipa` attachment) -> the buyer copies the license into klipa and
+clicks **Activate** -> the app verifies the Ed25519 signature offline
+against the public key baked into `license.rs`. No network at activation.
+
+Activation requires the **signed file**, not just an email: klipa is
+registered with `email_activation=False`, so the server's `/activate`
+email-lookup returns 403 for klipa (it still works for PromptBar).
+Knowing a buyer's address is therefore not enough to unlock.
 
 The server is the shared multi-product service in
 `PromptBar/scripts/pi-license-server/` (one Ko-fi account = one webhook,
@@ -152,15 +157,14 @@ See `scripts/pi-license-server/README.md` for the klipa-specific setup.
 
 ## Build-time variables (not secrets)
 
-Baked into the binary at compile time. All optional - the source already
-defaults to the Ko-fi buy link and the `licenses.peterdsp.dev` endpoint.
-Set in [Actions > Variables](https://github.com/peterdsp/klipa/settings/variables/actions),
+Baked into the binary at compile time. Optional - the source already
+defaults to the Ko-fi buy link. Set in
+[Actions > Variables](https://github.com/peterdsp/klipa/settings/variables/actions),
 not Secrets, because they ship inside the binary anyway.
 
 | Name | Value |
 | --- | --- |
 | `KLIPA_PURCHASE_URL` | Public buy URL surfaced in the trial-expired dialog (Ko-fi) |
-| `KLIPA_LICENSE_ENDPOINT` | Override for the activation endpoint (defaults to `https://licenses.peterdsp.dev/activate`) |
 
 ## Tagging a release
 

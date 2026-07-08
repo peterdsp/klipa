@@ -30,7 +30,7 @@ pub const AWAKE_END_ID: &str = "__klipa_awake_end";
 pub const AWAKE_DISPLAY_ID: &str = "__klipa_awake_display";
 /// Prefix for "start a session of N seconds" items; 0 = indefinitely.
 pub const AWAKE_START_PREFIX: &str = "__klipa_awake_start:";
-/// Open the purchase page / activate with the buyer's Ko-fi email.
+/// Open the purchase page / activate with the buyer's license file.
 pub const BUY_ID: &str = "__klipa_buy";
 pub const ACTIVATE_ID: &str = "__klipa_activate";
 /// Menu bar display presets.
@@ -188,7 +188,7 @@ impl Tray {
             ));
             let _ = menu.append(&MenuItem::with_id(
                 ACTIVATE_ID,
-                "Activate (copy your Ko-fi email)",
+                "Activate (paste license file)",
                 true,
                 None,
             ));
@@ -249,7 +249,7 @@ fn paywall_menu(price: &str, notice: Option<&str>) -> Menu {
     ));
     let _ = menu.append(&MenuItem::with_id(
         ACTIVATE_ID,
-        "Activate (copy your Ko-fi email)",
+        "Activate (paste license file)",
         true,
         None,
     ));

@@ -18,14 +18,18 @@ emailed. A license signed for one product cannot unlock another.
 ```
 Ko-fi sale ─► /webhook ─► match klipa item ─► sign Ed25519 license
                                               ─► archive <email>.klipa
-                                              ─► email the buyer
-klipa app  ─► POST /activate {email, product:"klipa"}
-           ◄─ signed license blob
+                                              ─► email buyer (inline + .klipa)
+klipa app  ─► buyer pastes the license from the email
            ─► verify signature offline against LICENSE_PUBKEY_B64
 ```
 
-The buyer never handles a key: they copy the email they used on Ko-fi,
-click **Activate**, and klipa fetches + verifies the license.
+Activation is **offline and file-based**: the buyer copies the signed
+license from their email (or the attached `.klipa` file) and clicks
+**Activate**; klipa verifies the signature locally. The server's
+`/activate` email-lookup is **disabled for klipa** (`email_activation=False`)
+so a known address alone can't unlock - you need the signed file. This
+also means there is no online re-verification, so a refund can't be
+revoked remotely (a deliberate tradeoff for the €1.99 "honest nudge").
 
 ## The keypair
 
@@ -80,13 +84,19 @@ curl -s https://licenses.peterdsp.dev/health   # both products should list
 
 ## Verifying end to end
 
+klipa's `/activate` email-lookup is disabled, so it returns 403 (that's
+expected and correct):
+
 ```bash
-# klipa admin/license for a known email (the operator's admin license is
-# auto-bootstrapped at server startup):
-curl -s -X POST https://licenses.peterdsp.dev/activate \
+curl -s -o /dev/null -w '%{http_code}\n' -X POST \
+  https://licenses.peterdsp.dev/activate \
   -H 'Content-Type: application/json' \
-  -d '{"email":"info@peterdsp.dev","product":"klipa"}'
+  -d '{"email":"info@peterdsp.dev","product":"klipa"}'   # -> 403
 ```
 
-A successful response is the signed license JSON (`product: "klipa"`,
-plus a `signature`). In the app: copy the email, click **Activate**.
+To get a real license, trigger a test Ko-fi purchase (or read the
+operator's bootstrapped archive on the Pi:
+`cat ~/promptbar/issued/info_at_peterdsp_dev.klipa`). Copy that signed
+JSON, then in the app click **Activate** - it verifies offline. PromptBar
+activation (`/activate` with no product) still returns its license
+directly, unchanged.

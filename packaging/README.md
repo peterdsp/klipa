@@ -249,10 +249,18 @@ free trial, then a one-time **€1.99** unlock.
 **How it works.** Payment is on **Ko-fi**. A self-hosted license server
 (the shared multi-product service in `../scripts/pi-license-server/`)
 receives the Ko-fi webhook, signs an **Ed25519** license tied to the
-buyer's email, and emails it. To activate, the buyer copies that email to
-the clipboard and clicks *Activate*: klipa posts the email to the server,
-gets the signed blob, and verifies the signature **offline** against the
-public key baked into `license.rs`. No key to paste, no key to lose.
+buyer's email, and emails it (inline text + a `.klipa` attachment). To
+activate, the buyer copies the license contents to the clipboard and
+clicks *Activate*: klipa verifies the signature **offline** against the
+public key baked into `license.rs`. No network at activation.
+
+Activation deliberately requires the **signed file**, not just an email:
+the server's `/activate` email-lookup is disabled for klipa
+(`email_activation=False`), so knowing a buyer's address is not enough to
+unlock - you need the license they were emailed. Since a valid license is
+a permanent signed file, there is no online re-verification (a refund
+can't be revoked remotely) - an accepted tradeoff for a €1.99 open-source
+"honest nudge" gate.
 
 Two **build-time** settings are baked in via `option_env!` (not secret -
 they ship in the binary; both optional since the source defaults are
@@ -261,7 +269,6 @@ correct):
 | Repo variable | Meaning | Default if unset |
 |---|---|---|
 | `KLIPA_PURCHASE_URL` | where *Unlock* sends the buyer | `https://ko-fi.com/s/4e1cf2ac40` |
-| `KLIPA_LICENSE_ENDPOINT` | activation endpoint the app posts to | `https://licenses.peterdsp.dev/activate` |
 
 Set them as GitHub **Actions variables** (Settings -> Secrets and
 variables -> Actions -> *Variables*); the macOS / Windows / Linux build
