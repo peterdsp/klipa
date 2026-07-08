@@ -56,8 +56,10 @@ struct Klipa {
     settings: settings::Settings,
     /// Cache for the temperature backing the "weather" menu bar modes.
     weather: weather::WeatherState,
-    /// Last time the menu bar title (date/temp) was refreshed.
-    menubar_refreshed: Instant,
+    /// Last menu bar title we actually drew (outer `None` = never drawn,
+    /// inner `None` = icon-only). Lets the per-tick refresh skip the
+    /// `set_title` call unless the date/temperature text really changed.
+    menubar_title_shown: Option<Option<String>>,
     /// Once-a-day background check for a newer release (no-op in the
     /// App Store build - MAS handles updates itself).
     updater: updater::UpdateState,
@@ -119,10 +121,16 @@ impl Klipa {
     fn refresh_menubar_title(&mut self) {
         let Some(tray) = &self.tray else { return };
         let display = self.settings.menubar_display;
-        let title = settings::menubar_title(display, &mut self.weather);
+        // Non-blocking: reads the cached temperature and lets the weather
+        // module refresh it on a worker thread. Cheap to call every tick,
+        // so the title lands the moment a background fetch completes.
+        let title = settings::menubar_title(display, &self.weather);
+        if self.menubar_title_shown.as_ref() == Some(&title) {
+            return;
+        }
         tray.set_title(title.as_deref());
         tray.set_icon_visible(title.is_none());
-        self.menubar_refreshed = Instant::now();
+        self.menubar_title_shown = Some(title);
     }
 
     fn set_menubar_display(&mut self, mode: settings::MenubarDisplay) {
@@ -237,12 +245,11 @@ impl ApplicationHandler for Klipa {
             self.rebuild_menu();
         }
 
-        // Refresh the menu bar title once a minute: the date rolls over
-        // at midnight, and the temperature cache re-fetches on its own
-        // TTL from inside the WeatherState.
-        if self.menubar_refreshed.elapsed() >= Duration::from_secs(60) {
-            self.refresh_menubar_title();
-        }
+        // Refresh the menu bar title every tick. It's a no-op unless the
+        // text changed, so this cheaply picks up the date rolling over at
+        // midnight and any temperature the background weather fetch just
+        // landed, without ever blocking the loop on the network.
+        self.refresh_menubar_title();
 
         // Rebuild the menu the moment the background updater posts a
         // "new version available" result. Cheap: the check itself only
@@ -381,7 +388,7 @@ fn main() {
         license_refreshed: Instant::now(),
         settings,
         weather: weather::WeatherState::new(),
-        menubar_refreshed: Instant::now(),
+        menubar_title_shown: None,
         updater: updater::UpdateState::new(),
         menu_sig: None,
     };

@@ -11,6 +11,14 @@
 <dict>
   <key>com.apple.security.app-sandbox</key>
   <true/>
+  <!-- Outgoing network connections. Without this the sandbox blocks
+       every outbound request, so the opt-in "Temperature" menu bar mode
+       (ip-api.com geolocation + open-meteo.com) and the update check can
+       never reach the network and silently show nothing. Its absence was
+       the cause of App Review 2.1(a): "Temperature option does not
+       display temperature." -->
+  <key>com.apple.security.network.client</key>
+  <true/>
   <key>com.apple.application-identifier</key>
   <string>TEAMID.dev.peterdsp.klipa</string>
   <key>com.apple.developer.team-identifier</key>
