@@ -121,16 +121,46 @@ is not set. The first-ever winget submission must be done manually; see
 | --- | --- |
 | `WINGET_TOKEN` | Classic PAT with `public_repo` scope that can push to your fork of `winget-pkgs` |
 
-## Build-time variables (not secrets)
+## Channel 4: Paid unlock (direct-download builds only)
 
-Baked into the binary at compile time for the license gate. Set in
-[Actions > Variables](https://github.com/peterdsp/klipa/settings/variables/actions),
-not Secrets, because they are baked into the shipped binary anyway.
+Payment is on **Ko-fi**; a self-hosted license server signs each buyer an
+Ed25519 license tied to their checkout email. The Mac App Store build has
+the `license` feature compiled OUT, so none of this applies there.
+
+Flow: Ko-fi shop sale -> Ko-fi webhook -> license server on the Pi
+(`licenses.peterdsp.dev`) signs a license and emails it -> the buyer
+copies that email into klipa and clicks **Activate** -> the app posts the
+email to `/activate`, gets the signed blob back, and verifies the Ed25519
+signature offline against the public key baked into `license.rs`.
+
+The server is the shared multi-product service in
+`PromptBar/scripts/pi-license-server/` (one Ko-fi account = one webhook,
+so PromptBar and klipa share it). klipa's slice is added purely through
+env on the Pi's `/home/peterdsp/promptbar/.env`:
 
 | Name | Value |
 | --- | --- |
-| `KLIPA_GUMROAD_PRODUCT_ID` | Product id used by the license verify call |
-| `KLIPA_PURCHASE_URL` | Public buy URL surfaced in the trial-expired dialog |
+| `KLIPA_PRIVATE_KEY` | Path to klipa's Ed25519 signing key (raw 32 bytes, base64) on the Pi |
+| `KLIPA_LINK_CODES` | klipa's Ko-fi `direct_link_code` (`4e1cf2ac40`) |
+| `KLIPA_NAME_MATCH` | `klipa` (fallback item-name match) |
+| `KLIPA_MIN_VERSION` | Minimum version a license unlocks (`0.4.0`) |
+
+The **public** half of the keypair is a source constant
+(`LICENSE_PUBKEY_B64` in `license.rs`) - safe to commit. The **private**
+half lives only on the Pi and in your signing backup, never in the repo.
+See `scripts/pi-license-server/README.md` for the klipa-specific setup.
+
+## Build-time variables (not secrets)
+
+Baked into the binary at compile time. All optional - the source already
+defaults to the Ko-fi buy link and the `licenses.peterdsp.dev` endpoint.
+Set in [Actions > Variables](https://github.com/peterdsp/klipa/settings/variables/actions),
+not Secrets, because they ship inside the binary anyway.
+
+| Name | Value |
+| --- | --- |
+| `KLIPA_PURCHASE_URL` | Public buy URL surfaced in the trial-expired dialog (Ko-fi) |
+| `KLIPA_LICENSE_ENDPOINT` | Override for the activation endpoint (defaults to `https://licenses.peterdsp.dev/activate`) |
 
 ## Tagging a release
 

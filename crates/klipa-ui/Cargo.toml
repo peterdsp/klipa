@@ -18,11 +18,14 @@ default = ["frontmost", "license", "weather"]
 # active-win-pos-rs (CGWindowList / accessibility). Disabled for the
 # Mac App Store build, where the sandbox forbids it.
 frontmost = ["dep:active-win-pos-rs"]
-# Paid-version gate: a 7-day free trial then a €1.99 unlock, with online
-# license-key verification via curl. Disabled for the Mac App Store
-# build, where the store handles payment. Pulls in the `keyring` crate
-# so the trial start survives a reinstall.
-license = ["dep:keyring"]
+# Paid-version gate: a 7-day free trial then a €1.99 unlock. Buyers pay
+# on Ko-fi; the self-hosted license server emails an Ed25519-signed
+# license tied to their email, and the app activates by posting that
+# email and verifying the signature offline. Disabled for the Mac App
+# Store build, where the store handles payment. Pulls in `keyring` (so
+# the trial start survives a reinstall) and `ed25519-compact` (to verify
+# the license signature).
+license = ["dep:keyring", "dep:ed25519-compact"]
 # Opt-in "temperature next to the menu bar clock" mode via curl. Uses
 # ip-api.com for coarse geolocation and open-meteo.com for the
 # temperature. Off (compiled out) at build time only if you want a
@@ -68,6 +71,10 @@ active-win-pos-rs = { version = "0.9", optional = true }
 # with the license feature only (App Store build handles paid-vs-free
 # via the store) so the MAS binary carries none of this weight.
 keyring = { version = "3", optional = true, features = ["apple-native", "windows-native", "linux-native-sync-persistent"] }
+# Ed25519 verification for Ko-fi license blobs (license feature only). A
+# tiny, dependency-light pure-Rust impl - fits klipa's no-bloat budget
+# far better than ed25519-dalek's full curve stack.
+ed25519-compact = { version = "2", optional = true, default-features = false }
 
 # macOS-only: convert the process to a menubar accessory app
 # (no dock icon, no main menu) by calling

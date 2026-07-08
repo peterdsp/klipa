@@ -244,32 +244,38 @@ cd /path/to/aur/klipa-bin && git commit -am "klipa 0.2.0" && git push
 The paid gate lives in [`../crates/klipa-ui/src/license.rs`](../crates/klipa-ui/src/license.rs)
 behind the `license` cargo feature (on by default, **off** for the Mac App
 Store build via `--no-default-features --features mas`). It is a 7-day
-free trial, then a one-time **€1.99** unlock verified against a store's
-license-key API (Gumroad by default).
+free trial, then a one-time **€1.99** unlock.
 
-Two **build-time** settings are baked into the binary via `option_env!`,
-so set them in the environment when CI compiles the release (they are not
-secret - the product id is used client-side anyway):
+**How it works.** Payment is on **Ko-fi**. A self-hosted license server
+(the shared multi-product service in `../scripts/pi-license-server/`)
+receives the Ko-fi webhook, signs an **Ed25519** license tied to the
+buyer's email, and emails it. To activate, the buyer copies that email to
+the clipboard and clicks *Activate*: klipa posts the email to the server,
+gets the signed blob, and verifies the signature **offline** against the
+public key baked into `license.rs`. No key to paste, no key to lose.
+
+Two **build-time** settings are baked in via `option_env!` (not secret -
+they ship in the binary; both optional since the source defaults are
+correct):
 
 | Repo variable | Meaning | Default if unset |
 |---|---|---|
-| `KLIPA_GUMROAD_PRODUCT_ID` | Gumroad product id used to verify keys | empty -> keys can't be verified (trial still works) |
-| `KLIPA_PURCHASE_URL` | where *Unlock* sends the buyer | `https://klipa.peterdsp.dev/buy` |
+| `KLIPA_PURCHASE_URL` | where *Unlock* sends the buyer | `https://ko-fi.com/s/4e1cf2ac40` |
+| `KLIPA_LICENSE_ENDPOINT` | activation endpoint the app posts to | `https://licenses.peterdsp.dev/activate` |
 
 Set them as GitHub **Actions variables** (Settings -> Secrets and
 variables -> Actions -> *Variables*); the macOS / Windows / Linux build
-jobs already read them.
+jobs already read `KLIPA_PURCHASE_URL`.
 
-**Store setup (Gumroad):** create a €1.99 product, enable *"Generate a
-unique license key per sale"*, and copy its product id into
-`KLIPA_GUMROAD_PRODUCT_ID`. Buyers get a key, paste it into klipa, and the
-app calls `api.gumroad.com/v2/licenses/verify`. To use a different store
-(Lemon Squeezy, Polar, ...) swap the single `verify_key` function.
+**Server setup:** see `../scripts/pi-license-server/README.md`. The public
+signing key is the `LICENSE_PUBKEY_B64` constant in `license.rs`; the
+private key lives only on the Pi. To move to a different store, point the
+webhook at the server and adjust the item match.
 
 To build a licensed binary locally for testing:
 
 ```bash
-KLIPA_GUMROAD_PRODUCT_ID=your_id cargo build --release    # license on
+cargo build --release                                      # license on (default)
 cargo build --release --no-default-features --features mas # App Store: no gate
 ```
 

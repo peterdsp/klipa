@@ -39,19 +39,20 @@ pub fn get(url: &str, timeout: Duration) -> Option<Vec<u8>> {
     Some(out.stdout)
 }
 
-/// POST a form-encoded body via stdin so field values never appear in
-/// the command line (nor in a `ps` listing). Returns the response body
-/// even on HTTP 4xx / 5xx, since some APIs (e.g. Gumroad's license
-/// verify) return meaningful JSON alongside a non-2xx status.
+/// POST a JSON body via stdin (so it never appears in the command line
+/// nor a `ps` listing) and return the response body. Used to talk to the
+/// Ko-fi license server's `/activate` endpoint, which reads JSON. Returns
+/// the body even on HTTP 4xx (the server sends a meaningful JSON error,
+/// e.g. "no license on file", alongside a 404), and `None` only when
+/// there was no response at all (treated as a network failure upstream).
 #[cfg(feature = "license")]
-pub fn post_form(url: &str, fields: &[(&str, &str)], timeout: Duration) -> Option<Vec<u8>> {
-    let body = encode_form(fields);
+pub fn post_json(url: &str, json_body: &str, timeout: Duration) -> Option<Vec<u8>> {
     let mut child = Command::new("curl")
         .arg("-sSL")
         .arg("--max-time")
         .arg(timeout.as_secs().max(1).to_string())
         .arg("-H")
-        .arg("Content-Type: application/x-www-form-urlencoded")
+        .arg("Content-Type: application/json")
         .arg("--data-binary")
         .arg("@-") // read the body from stdin
         .arg(url)
@@ -63,42 +64,12 @@ pub fn post_form(url: &str, fields: &[(&str, &str)], timeout: Duration) -> Optio
     child
         .stdin
         .as_mut()?
-        .write_all(body.as_bytes())
+        .write_all(json_body.as_bytes())
         .ok()?;
     let out = child.wait_with_output().ok()?;
     if out.stdout.is_empty() {
         None
     } else {
         Some(out.stdout)
-    }
-}
-
-/// Minimal application/x-www-form-urlencoded encoder for ASCII+utf8.
-/// Percent-encodes everything except the RFC 3986 "unreserved" set.
-#[cfg(feature = "license")]
-fn encode_form(fields: &[(&str, &str)]) -> String {
-    let mut out = String::new();
-    for (i, (k, v)) in fields.iter().enumerate() {
-        if i > 0 {
-            out.push('&');
-        }
-        percent_encode(k, &mut out);
-        out.push('=');
-        percent_encode(v, &mut out);
-    }
-    out
-}
-
-#[cfg(feature = "license")]
-fn percent_encode(s: &str, out: &mut String) {
-    for b in s.as_bytes() {
-        let c = *b;
-        let unreserved = c.is_ascii_alphanumeric() || matches!(c, b'-' | b'_' | b'.' | b'~');
-        if unreserved {
-            out.push(c as char);
-        } else {
-            out.push('%');
-            out.push_str(&format!("{c:02X}"));
-        }
     }
 }
