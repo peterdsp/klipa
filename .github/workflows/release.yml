@@ -27,9 +27,9 @@ jobs:
       DEVELOPER_ID_CERTS_P12_BASE64: ${{ secrets.DEVELOPER_ID_CERTS_P12_BASE64 }}
       CERTS_P12_PASSWORD: ${{ secrets.CERTS_P12_PASSWORD }}
       KEYCHAIN_PASSWORD: ${{ secrets.CI_KEYCHAIN_PASSWORD }}
-      # Baked into the binary at compile time for the license gate (both
-      # optional; unset = default purchase URL + keys can't be verified).
-      KLIPA_GUMROAD_PRODUCT_ID: ${{ vars.KLIPA_GUMROAD_PRODUCT_ID }}
+      # Baked into the binary at compile time. Optional: the source
+      # already defaults to the Ko-fi buy link and the licenses.peterdsp.dev
+      # activation endpoint, so this is only an override.
       KLIPA_PURCHASE_URL: ${{ vars.KLIPA_PURCHASE_URL }}
     steps:
       - uses: actions/checkout@v5
@@ -80,7 +80,6 @@ jobs:
   windows:
     runs-on: windows-latest
     env:
-      KLIPA_GUMROAD_PRODUCT_ID: ${{ vars.KLIPA_GUMROAD_PRODUCT_ID }}
       KLIPA_PURCHASE_URL: ${{ vars.KLIPA_PURCHASE_URL }}
     steps:
       - uses: actions/checkout@v5
@@ -106,7 +105,6 @@ jobs:
   linux:
     runs-on: ubuntu-latest
     env:
-      KLIPA_GUMROAD_PRODUCT_ID: ${{ vars.KLIPA_GUMROAD_PRODUCT_ID }}
       KLIPA_PURCHASE_URL: ${{ vars.KLIPA_PURCHASE_URL }}
     steps:
       - uses: actions/checkout@v5
