@@ -1,0 +1,60 @@
+name: ci
+
+# Build + test on every push to main and every PR, so regressions
+# surface here instead of at release-tag time. Mirrors the platforms the
+# release workflow ships to, plus the App Store feature combos (which the
+# default build does not exercise).
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  test:
+    name: test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-14, windows-latest]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Install Linux deps
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libfontconfig1-dev libxkbcommon-dev libgl1-mesa-dev \
+            libxcb1-dev libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev \
+            libgtk-3-dev libxdo-dev libayatana-appindicator3-dev
+      - name: Build
+        run: cargo build --workspace --all-targets
+      - name: Test
+        run: cargo test --workspace
+
+  # The Mac App Store binary is built with a different feature set
+  # (`mas`, no `license`/`frontmost`), so a feature-gated regression can
+  # pass the default build yet break the store build. Exercise those
+  # combos explicitly.
+  features:
+    name: feature combos (macOS)
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: mas + weather (the App Store build)
+        run: cargo build -p klipa-ui --no-default-features --features "mas weather"
+      - name: mas only (weather compiled out)
+        run: cargo build -p klipa-ui --no-default-features --features mas
+      - name: no default features (minimal)
+        run: cargo build -p klipa-ui --no-default-features
