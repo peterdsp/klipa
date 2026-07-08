@@ -62,9 +62,11 @@ winget and AUR are submitted per release (see
 klipa is **free in full for 7 days**, then **€1.99 once** to keep using
 it - no subscription. After the trial the menubar dropdown shows an
 *Unlock full version* item; buy once on Ko-fi and you are emailed a
-license tied to your address. Copy that email to the clipboard and click
-*Activate (copy your Ko-fi email)* - the app fetches the signed license,
-verifies it, and then works offline.
+signed license (a short text block, also attached as a `.klipa` file).
+Copy the license to the clipboard and click *Activate (paste license
+file)* - the app verifies the signature offline and unlocks. No key
+server to reach, and knowing an email alone can't unlock someone else's
+copy.
 
 The trial start is also mirrored to the OS keychain (macOS Keychain,
 Windows Credential Manager, Linux Secret Service), so uninstalling and

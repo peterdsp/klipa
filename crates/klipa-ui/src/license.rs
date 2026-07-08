@@ -69,13 +69,6 @@ mod imp {
     /// klipa.
     const LICENSE_PUBKEY_B64: &str = "jbSjJelSCv+gs0bXuaVnsKsu/IyhGGUrjJ+ProKrLPo=";
 
-    /// Where the app posts `{email, product}` to fetch a signed license.
-    /// Override at build time with `KLIPA_LICENSE_ENDPOINT=...`.
-    const LICENSE_ENDPOINT: &str = match option_env!("KLIPA_LICENSE_ENDPOINT") {
-        Some(v) => v,
-        None => "https://licenses.peterdsp.dev/activate",
-    };
-
     /// Where the *Unlock* button sends buyers. Override at build time
     /// with `KLIPA_PURCHASE_URL=...`.
     const PURCHASE_URL: &str = match option_env!("KLIPA_PURCHASE_URL") {
@@ -90,8 +83,8 @@ mod imp {
         trial_started_at: Option<OffsetDateTime>,
         /// The Ko-fi email this install is licensed to (lowercased).
         licensed_email: Option<String>,
-        /// The signed license blob returned by the server, kept as proof
-        /// and so activation survives offline restarts.
+        /// The signed license blob from the buyer's `.klipa` file, kept as
+        /// proof and re-verified offline on each launch.
         license: Option<serde_json::Value>,
         #[serde(with = "time::serde::rfc3339::option", default)]
         activated_at: Option<OffsetDateTime>,
@@ -152,67 +145,70 @@ mod imp {
             open_url(PURCHASE_URL);
         }
 
-        /// Activate using whatever text is on the clipboard - now the
-        /// buyer's Ko-fi email, the natural gesture for a clipboard app:
-        /// copy your email, click Activate. Fetches the signed license
-        /// from the server and stores it on success.
+        /// Activate from whatever text is on the clipboard - the contents
+        /// of the buyer's emailed `.klipa` license file (a signed JSON
+        /// blob). We verify the Ed25519 signature offline against the
+        /// embedded public key; no network, and knowing the buyer's email
+        /// alone is not enough - you need the signed file itself.
         pub fn activate_from_clipboard(&mut self) {
             let text = arboard::Clipboard::new()
                 .ok()
                 .and_then(|mut c| c.get_text().ok())
                 .map(|s| s.trim().to_string())
                 .unwrap_or_default();
-            if !looks_like_email(&text) {
-                self.flash("Copy the email you used on Ko-fi, then Activate");
+            if text.is_empty() {
+                self.flash("Copy your .klipa license file's contents, then Activate");
                 return;
             }
-            let email = text.to_lowercase();
-            match request_license(&email) {
-                (Verify::Valid, Some(blob)) => {
-                    let now = OffsetDateTime::now_utc();
-                    self.state.licensed_email = Some(email);
-                    self.state.license = Some(blob);
-                    self.state.activated_at = Some(now);
-                    self.state.last_verified_at = Some(now);
-                    self.save();
-                    self.flash("Activated - thank you!");
-                }
-                (Verify::Invalid, _) => {
-                    self.flash("No license found for that email - use your Ko-fi address")
-                }
-                (Verify::Network, _) => self.flash("Could not reach the license server"),
-                (Verify::Valid, None) => self.flash("Could not reach the license server"),
+            // A common mistake: pasting the email instead of the file.
+            if looks_like_email(&text) {
+                self.flash("Paste your .klipa license file's contents, not your email");
+                return;
             }
-        }
-
-        /// Re-check an activated license in the background now and then,
-        /// so a refunded/revoked purchase eventually stops working.
-        /// Best-effort: network failures keep the license (offline
-        /// grace).
-        pub fn reverify_if_stale(&mut self) {
-            let (Some(email), Some(last)) =
-                (self.state.licensed_email.clone(), self.state.last_verified_at)
-            else {
+            let Ok(blob) = serde_json::from_str::<serde_json::Value>(&text) else {
+                self.flash("That isn't a klipa license - paste your .klipa file's contents");
                 return;
             };
-            if OffsetDateTime::now_utc() - last < time::Duration::days(14) {
+            if !verify_blob(&blob) {
+                self.flash("That license isn't valid for this version of klipa");
                 return;
             }
-            match request_license(&email) {
-                (Verify::Valid, _) => {
-                    self.state.last_verified_at = Some(OffsetDateTime::now_utc());
-                    self.save();
-                }
-                (Verify::Invalid, _) => {
-                    // Revoked/refunded: drop the activation.
-                    self.state.activated_at = None;
-                    self.state.licensed_email = None;
-                    self.state.license = None;
-                    self.save();
-                }
-                // Network: keep the license as-is (offline grace).
-                (Verify::Network, _) => {}
+            let now = OffsetDateTime::now_utc();
+            self.state.licensed_email = blob
+                .get("email")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_lowercase());
+            self.state.license = Some(blob);
+            self.state.activated_at = Some(now);
+            self.state.last_verified_at = Some(now);
+            self.save();
+            self.flash("Activated - thank you!");
+        }
+
+        /// Re-verify the stored license offline now and then. The license
+        /// is a signed file, so this is a cheap integrity check (not a
+        /// network call): activation is dropped only if the stored blob no
+        /// longer verifies - e.g. it was hand-edited, or a key rotation
+        /// invalidated old licenses.
+        pub fn reverify_if_stale(&mut self) {
+            if self.state.activated_at.is_none() {
+                return;
             }
+            let Some(last) = self.state.last_verified_at else {
+                return;
+            };
+            if OffsetDateTime::now_utc() - last < time::Duration::days(1) {
+                return;
+            }
+            let still_valid = self.state.license.as_ref().is_some_and(verify_blob);
+            if still_valid {
+                self.state.last_verified_at = Some(OffsetDateTime::now_utc());
+            } else {
+                self.state.activated_at = None;
+                self.state.licensed_email = None;
+                self.state.license = None;
+            }
+            self.save();
         }
 
         /// A short-lived status line for the menu, if one is pending.
@@ -300,14 +296,9 @@ mod imp {
         }
     }
 
-    enum Verify {
-        Valid,
-        Invalid,
-        Network,
-    }
-
-    /// Cheap sanity check before we bother the network: is this plausibly
-    /// an email address (one `@`, a dot after it, no spaces)?
+    /// Is this plausibly an email address (one `@`, a dot after it, no
+    /// spaces)? Used only to catch the "pasted my email, not the file"
+    /// mistake and show a helpful message.
     fn looks_like_email(s: &str) -> bool {
         let s = s.trim();
         if s.is_empty() || s.contains(char::is_whitespace) {
@@ -322,43 +313,18 @@ mod imp {
         }
     }
 
-    /// Ask the license server for `email`'s signed license, then verify
-    /// the signature offline. Returns `(Valid, blob)` only when the
-    /// server returned a license whose signature checks out for this
-    /// product and email.
-    fn request_license(email: &str) -> (Verify, Option<serde_json::Value>) {
-        let body = serde_json::json!({ "email": email, "product": PRODUCT }).to_string();
-        let Some(resp) = crate::http::post_json(LICENSE_ENDPOINT, &body, StdDuration::from_secs(10))
-        else {
-            // No response body at all: treat as a network hiccup so an
-            // existing license keeps working offline.
-            return (Verify::Network, None);
-        };
-        let Ok(json) = serde_json::from_slice::<serde_json::Value>(&resp) else {
-            return (Verify::Invalid, None);
-        };
-        // A license blob carries a signature; an error response ("no
-        // license on file", "invalid email", ...) does not.
-        if json.get("signature").is_none() {
-            return (Verify::Invalid, None);
-        }
-        if verify_blob(&json, email) {
-            (Verify::Valid, Some(json))
-        } else {
-            (Verify::Invalid, None)
-        }
-    }
-
     /// Verify a signed license blob: the Ed25519 signature must check out
-    /// against the embedded public key, the product must be klipa, the
-    /// email must match, and this build must satisfy `min_version`.
+    /// against the embedded public key, the product must be klipa, and
+    /// this build must satisfy `min_version`. There is no email argument -
+    /// possessing a correctly-signed license file IS the proof; the email
+    /// inside is just recorded for display.
     ///
     /// The signed message is the canonical JSON of the five fields with
     /// sorted keys and no whitespace - byte-identical to what the Python
     /// server signs (`json.dumps(..., separators=(",",":"), sort_keys=True)`).
     /// Values are ASCII in practice (emails, ISO timestamps, semver), so
     /// serde_json and Python produce the same bytes.
-    fn verify_blob(blob: &serde_json::Value, expect_email: &str) -> bool {
+    fn verify_blob(blob: &serde_json::Value) -> bool {
         let field = |k: &str| blob.get(k).and_then(|v| v.as_str());
         let (
             Some(email),
@@ -380,9 +346,6 @@ mod imp {
         };
 
         if product != PRODUCT {
-            return false;
-        }
-        if !email.eq_ignore_ascii_case(expect_email) {
             return false;
         }
         if !version_at_least(CURRENT_VERSION, min_version) {
@@ -509,14 +472,16 @@ mod imp {
         #[test]
         fn real_signature_verifies_and_tamper_fails() {
             let blob: serde_json::Value = serde_json::from_str(GOOD_BLOB).unwrap();
-            // Correct email + product + version -> valid.
-            assert!(verify_blob(&blob, "buyer@example.com"));
-            // Wrong email for the same signature -> rejected.
-            assert!(!verify_blob(&blob, "someone@else.com"));
-            // Tampered field breaks the signature.
+            // Correctly-signed klipa license -> valid.
+            assert!(verify_blob(&blob));
+            // Tampering with any signed field breaks the signature.
             let mut tampered = blob.clone();
             tampered["order_id"] = serde_json::json!("hacked");
-            assert!(!verify_blob(&tampered, "buyer@example.com"));
+            assert!(!verify_blob(&tampered));
+            // Swapping the email invalidates it too (email is signed).
+            let mut wrong_email = blob.clone();
+            wrong_email["email"] = serde_json::json!("someone@else.com");
+            assert!(!verify_blob(&wrong_email));
         }
 
         // Small helper so panics print which variant we got.
