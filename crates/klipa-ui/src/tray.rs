@@ -41,7 +41,9 @@ pub const MENUBAR_BOTH_ID: &str = "__klipa_menubar_both";
 /// Prefix for "show N entries in the dropdown" items.
 pub const SHOW_COUNT_PREFIX: &str = "__klipa_show_count:";
 /// Preset dropdown sizes offered in the "Show in dropdown" submenu.
-const SHOW_COUNT_PRESETS: &[usize] = &[10, 25, 50, 100];
+/// Kept small so the native menu stays a compact, ~half-screen panel
+/// instead of a full-height wall of entries.
+const SHOW_COUNT_PRESETS: &[usize] = &[5, 10, 15, 20];
 
 /// Parse the count payload of a `SHOW_COUNT_PREFIX` menu id.
 pub fn parse_show_count(id: &str) -> Option<usize> {
@@ -69,10 +71,13 @@ pub fn parse_awake_start(id: &str) -> Option<Option<Duration>> {
     Some((secs > 0).then(|| Duration::from_secs(secs)))
 }
 
-/// Hard ceiling on dropdown entries regardless of the user's setting -
-/// native menus get unwieldy and slow to build beyond this. The user's
-/// configured "Show in dropdown" count is clamped to this.
-const MAX_MENU_ITEMS_HARD: usize = 100;
+/// Hard ceiling on dropdown entries regardless of the user's setting.
+/// A native menu grows to its content height and only starts scrolling
+/// once it exceeds the whole screen, so a large list fills the display.
+/// This cap keeps the dropdown a compact panel (~half screen at most);
+/// any higher saved "Show in dropdown" count is clamped down to this, so
+/// existing installs shrink on upgrade without touching their settings.
+const MAX_MENU_ITEMS_HARD: usize = 20;
 const LABEL_MAX_CHARS: usize = 48;
 
 pub struct Tray {
