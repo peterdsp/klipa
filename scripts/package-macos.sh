@@ -65,3 +65,29 @@ elif [ -n "${AC_PROFILE:-}" ] || [ -n "${AC_APPLE_ID:-}" ]; then
 fi
 
 echo "Built $PKG"
+
+# ── ZIP for passwordless in-app updates ────────────────────────────
+# The .pkg is the first-install artifact (Homebrew cask, direct
+# download). In-app updates instead pull this .zip and swap the bundle
+# in place as the current user - no installer, no admin prompt. So the
+# .app itself must be notarized + stapled (Gatekeeper checks the bundle
+# on this path, not a pkg wrapper).
+ZIP="dist/klipa-${VERSION}-macos.zip"
+if [ -n "${DEV_ID_APP:-}" ] && { [ -n "${AC_PROFILE:-}" ] || [ -n "${AC_APPLE_ID:-}" ]; }; then
+  echo "==> notarizing app for zip channel"
+  APPZIP="$(mktemp).zip"
+  ditto -c -k --keepParent "$APP" "$APPZIP"
+  if [ -n "${AC_PROFILE:-}" ]; then
+    xcrun notarytool submit "$APPZIP" --keychain-profile "$AC_PROFILE" --wait
+  else
+    xcrun notarytool submit "$APPZIP" --apple-id "$AC_APPLE_ID" \
+      --team-id "$AC_TEAM_ID" --password "$AC_PASSWORD" --wait
+  fi
+  xcrun stapler staple "$APP"
+else
+  echo "!! DEV_ID_APP / notary creds unset - shipping an UNSIGNED update zip." >&2
+fi
+# Zip the (now stapled, if credentials were present) app. `--keepParent`
+# makes `klipa.app` the top-level entry, which the updater relies on.
+ditto -c -k --keepParent "$APP" "$ZIP"
+echo "Built $ZIP"

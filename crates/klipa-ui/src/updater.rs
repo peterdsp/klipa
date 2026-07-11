@@ -6,9 +6,13 @@
 //! from GitHub once a day, and when it finds a newer version:
 //!
 //! 1. adds an "Update to vX.Y.Z" item to the tray menu, and
-//! 2. on click, downloads the platform installer to a temp file and
-//!    opens it with the OS default handler (Installer.app on macOS,
-//!    the .exe setup on Windows, xdg-open on Linux).
+//! 2. on click:
+//!    - macOS: downloads the notarized .zip and swaps `klipa.app` in
+//!      place as the current user (no installer, no admin prompt), then
+//!      relaunches on the new version. Falls back to the release page if
+//!      the app directory isn't writable (e.g. a non-admin account).
+//!    - Windows / Linux: downloads the platform installer and opens it
+//!      with the OS default handler (setup .exe / xdg-open).
 //!
 //! Zero binary cost: the fetch reuses [`crate::http::get`] (curl) and
 //! nothing new is linked in. If the network is down, we silently skip;
@@ -90,19 +94,37 @@ mod imp {
         }
 
         /// Called when the user clicks the update menu item.
+        ///
+        /// Runs entirely on a background thread so the ~seconds-long
+        /// download never freezes the UI loop. On macOS it swaps the app
+        /// bundle in place as the current user - no installer, no admin
+        /// prompt - and relaunches klipa on the new version; the old
+        /// process exits, so the stale "Update to ..." item disappears on
+        /// its own. Everything else keeps the simple "download + open the
+        /// installer" behavior.
         pub fn trigger(&self) {
             let Some(p) = &self.pending else {
                 return;
             };
-            // Download the installer to a temp file and open it. If the
-            // download fails, fall back to opening the release page in
-            // the user's browser so they can install manually.
-            let target = p
-                .installer_url
-                .as_deref()
-                .and_then(download_to_temp)
-                .unwrap_or_else(|| RELEASE_PAGE.to_string());
-            open_native(&target);
+            let installer_url = p.installer_url.clone();
+            std::thread::spawn(move || {
+                let downloaded = installer_url.as_deref().and_then(download_to_temp);
+                #[cfg(target_os = "macos")]
+                match downloaded {
+                    // In-place swap succeeded -> relaunch on the new
+                    // version (this exits the old process).
+                    Some(zip) if swap_bundle(&zip) => relaunch(),
+                    // Download failed, or the swap couldn't write the app
+                    // directory (e.g. a non-admin account): fall back to
+                    // the release page so the user can update by hand.
+                    _ => open_native(RELEASE_PAGE),
+                }
+                #[cfg(not(target_os = "macos"))]
+                {
+                    let target = downloaded.unwrap_or_else(|| RELEASE_PAGE.to_string());
+                    open_native(&target);
+                }
+            });
         }
 
         fn spawn_check(&self) {
@@ -142,8 +164,10 @@ mod imp {
     /// Match this build's platform to the right release asset.
     fn platform_asset(assets: &[serde_json::Value]) -> Option<String> {
         // These substrings match what scripts/package-*.sh produce.
+        // macOS updates via the .zip (in-place bundle swap), not the
+        // .pkg - the pkg is only for first installs.
         let needle: &str = if cfg!(target_os = "macos") {
-            "-macos.pkg"
+            "-macos.zip"
         } else if cfg!(target_os = "windows") {
             "-windows-x64-setup.exe"
         } else if cfg!(target_os = "linux") {
@@ -174,6 +198,87 @@ mod imp {
         let path = std::env::temp_dir().join(name);
         std::fs::write(&path, &body).ok()?;
         Some(path.to_string_lossy().to_string())
+    }
+
+    /// The running `.app` bundle, derived from the executable path
+    /// (`<bundle>/Contents/MacOS/<bin>`). `None` if we're not running
+    /// from a bundle (e.g. a bare `cargo run`), which skips the swap.
+    #[cfg(target_os = "macos")]
+    fn app_bundle_path() -> Option<std::path::PathBuf> {
+        let exe = std::env::current_exe().ok()?;
+        // MacOS -> Contents -> klipa.app
+        let bundle = exe.parent()?.parent()?.parent()?;
+        (bundle.extension()? == "app").then(|| bundle.to_path_buf())
+    }
+
+    /// Swap the running bundle for the freshly-downloaded one, in place,
+    /// as the current user - no installer, no admin prompt. Returns true
+    /// only if the new bundle is now live at the original path.
+    ///
+    /// Extraction happens into a staging dir on the *same* volume as the
+    /// bundle, so the two moves (old aside, new in) are same-directory
+    /// renames - atomic, with no window where the app is half-updated or
+    /// missing. Fails cleanly (leaving the old bundle intact) when the
+    /// app directory isn't writable, so the caller can fall back.
+    #[cfg(target_os = "macos")]
+    fn swap_bundle(zip: &str) -> bool {
+        let Some(bundle) = app_bundle_path() else {
+            return false;
+        };
+        let Some(dir) = bundle.parent() else {
+            return false;
+        };
+        let pid = std::process::id();
+        let staging = dir.join(format!(".klipa-update-{pid}"));
+        let old = dir.join(format!(".klipa-old-{pid}.app"));
+
+        // Fresh staging dir; bail early if we can't write here at all.
+        let _ = std::fs::remove_dir_all(&staging);
+        if std::fs::create_dir_all(&staging).is_err() {
+            return false;
+        }
+        // `ditto -x -k` unpacks the zip preserving the code signature,
+        // notarization staple, and extended attributes. `--keepParent`
+        // at pack time means the archive contains `klipa.app`.
+        let extracted = staging.join("klipa.app");
+        let unpacked = std::process::Command::new("ditto")
+            .args(["-x", "-k", zip])
+            .arg(&staging)
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false);
+        if !unpacked || !extracted.exists() {
+            let _ = std::fs::remove_dir_all(&staging);
+            return false;
+        }
+        // Move the current bundle aside, then move the new one in.
+        let _ = std::fs::remove_dir_all(&old);
+        if std::fs::rename(&bundle, &old).is_err() {
+            let _ = std::fs::remove_dir_all(&staging);
+            return false;
+        }
+        if std::fs::rename(&extracted, &bundle).is_err() {
+            // Put the old bundle back so we never leave the app missing.
+            let _ = std::fs::rename(&old, &bundle);
+            let _ = std::fs::remove_dir_all(&staging);
+            return false;
+        }
+        // Best-effort cleanup. Deleting the old bundle while this process
+        // still runs is fine on macOS - the live binary keeps its inode.
+        let _ = std::fs::remove_dir_all(&old);
+        let _ = std::fs::remove_dir_all(&staging);
+        true
+    }
+
+    /// Launch the freshly-swapped bundle and exit this (old) process so
+    /// the user lands on the new version. Called only after a successful
+    /// `swap_bundle`, so the bundle path still resolves.
+    #[cfg(target_os = "macos")]
+    fn relaunch() -> ! {
+        if let Some(bundle) = app_bundle_path() {
+            let _ = std::process::Command::new("open").arg("-n").arg(&bundle).spawn();
+        }
+        std::process::exit(0);
     }
 
     /// Open a file path or URL with the OS default handler.
