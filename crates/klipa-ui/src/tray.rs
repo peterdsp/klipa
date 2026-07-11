@@ -166,10 +166,13 @@ impl Tray {
         let _ = menu.append(&PredefinedMenuItem::separator());
         let _ = menu.append(&MenuItem::with_id(CLEAR_ID, "Clear history", !items.is_empty(), None));
 
+        // All the config controls live in one "Settings" submenu so the
+        // top-level menu stays short: the only thing that can grow is the
+        // clipboard-history list above. A native menu scrolls as a whole,
+        // so keeping the controls one hover away is what stops them from
+        // being buried under a long history.
         let _ = menu.append(&PredefinedMenuItem::separator());
-        let _ = menu.append(&build_awake_submenu(awake));
-        let _ = menu.append(&build_menubar_submenu(menubar));
-        let _ = menu.append(&build_show_count_submenu(shown));
+        let _ = menu.append(&build_settings_submenu(awake, menubar, shown, update));
 
         // During the trial, surface the days left + unlock/activate.
         if let Gate::Trial { days_left } = gate {
@@ -198,16 +201,6 @@ impl Tray {
         }
 
         let _ = menu.append(&PredefinedMenuItem::separator());
-        if let Some(label) = update {
-            // Show a triangle glyph so the update item is easy to spot
-            // even when the menu is long.
-            let _ = menu.append(&MenuItem::with_id(
-                UPDATE_ID,
-                format!("\u{25b2}  {label}"),
-                true,
-                None,
-            ));
-        }
         let _ = menu.append(&MenuItem::with_id(QUIT_ID, "Quit klipa", true, None));
         self.icon.set_menu(Some(Box::new(menu)));
     }
@@ -259,6 +252,36 @@ fn paywall_menu(price: &str, notice: Option<&str>) -> Menu {
     let _ = menu.append(&PredefinedMenuItem::separator());
     let _ = menu.append(&MenuItem::with_id(QUIT_ID, "Quit klipa", true, None));
     menu
+}
+
+/// Group every config control under one "Settings" submenu: keep-awake,
+/// the menu bar display, the dropdown size, and (when pending) the
+/// update action. Collapsing these keeps the top-level menu short so the
+/// controls are always one hover away instead of scrolled off the bottom
+/// under a long clipboard history. A bullet marks the title when an
+/// update is waiting, so it stays discoverable without opening the menu.
+fn build_settings_submenu(
+    awake: &AwakeView,
+    menubar: MenubarDisplay,
+    shown: usize,
+    update: Option<&str>,
+) -> Submenu {
+    let title = if update.is_some() { "Settings \u{25cf}" } else { "Settings" };
+    let sub = Submenu::new(title, true);
+    let _ = sub.append(&build_awake_submenu(awake));
+    let _ = sub.append(&build_menubar_submenu(menubar));
+    let _ = sub.append(&build_show_count_submenu(shown));
+    if let Some(label) = update {
+        let _ = sub.append(&PredefinedMenuItem::separator());
+        // Triangle glyph so the update item is easy to spot in the list.
+        let _ = sub.append(&MenuItem::with_id(
+            UPDATE_ID,
+            format!("\u{25b2}  {label}"),
+            true,
+            None,
+        ));
+    }
+    sub
 }
 
 /// Build the "Keep awake" submenu: a status line when active, the
