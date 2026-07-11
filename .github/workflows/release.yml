@@ -74,7 +74,10 @@ jobs:
       - uses: actions/upload-artifact@v5
         with:
           name: macos
-          path: dist/*.pkg
+          # .pkg = first install; -macos.zip = passwordless in-app updates.
+          path: |
+            dist/*.pkg
+            dist/*-macos.zip
 
   # ────────────────────────────── Windows ───────────────────────────────
   windows:
