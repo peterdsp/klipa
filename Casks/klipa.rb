@@ -7,8 +7,8 @@
 # `version` and `sha256` are kept current automatically by the release
 # workflow (see scripts/update-package-managers.sh). Do not hand-edit.
 cask "klipa" do
-  version "0.4.6"
-  sha256 "6e658c1c7aef245c557841c33ffcdcebc75ce4eada224edc6ad397eedea973e4"
+  version "0.4.7"
+  sha256 "1223a29d2ef059f7b68c85ca30cbf4a039f330e8ddc0bf499efdb5f47e5413c7"
 
   url "https://github.com/peterdsp/klipa/releases/download/v#{version}/klipa-#{version}-macos.pkg"
   name "klipa"
