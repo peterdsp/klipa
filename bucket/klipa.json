@@ -6,7 +6,7 @@
     "architecture": {
         "64bit": {
             "url": "https://github.com/peterdsp/klipa/releases/download/v0.4.7/klipa-0.4.7-windows-x64.zip",
-            "hash": "767b4e98e9461c411b93cb967d355891dcf2f503eb5d593f6a57e1d23f04a003"
+            "hash": "2db7d68ea07ca661ab7cd57b47d7d9578e89026cbaf914e09e359c90c684fdf3"
         }
     },
     "bin": "klipa.exe",
