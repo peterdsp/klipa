@@ -1,5 +1,5 @@
 PackageIdentifier: dev.peterdsp.klipa
-PackageVersion: 0.4.6
+PackageVersion: 0.4.7
 InstallerType: nullsoft
 Scope: machine
 InstallModes:
@@ -8,7 +8,7 @@ InstallModes:
   - silentWithProgress
 Installers:
   - Architecture: x64
-    InstallerUrl: https://github.com/peterdsp/klipa/releases/download/v0.4.6/klipa-0.4.6-windows-x64-setup.exe
-    InstallerSha256: "913dbd048f142159cf3bf1d1a98d1a8b52e4e81fdf419b7b3a70ccd8c3a53673"
+    InstallerUrl: https://github.com/peterdsp/klipa/releases/download/v0.4.7/klipa-0.4.7-windows-x64-setup.exe
+    InstallerSha256: "7be314233a62b4b06e6a48b9fbc54f9d5fae96454f5da68672d74f956db87094"
 ManifestType: installer
 ManifestVersion: 1.6.0
