@@ -39,8 +39,9 @@ pub const DEFAULT_HISTORY_CAP: usize = 200;
 
 /// How many entries the dropdown shows when you click the menu bar icon.
 /// This is what the user actually sees; `history_cap` above is how many
-/// are *remembered*. Kept small by default so the native menu stays snappy.
-pub const DEFAULT_DROPDOWN_ITEMS: usize = 25;
+/// are *remembered*. Kept small by default so the native menu stays a
+/// compact, ~half-screen panel rather than a full-height list.
+pub const DEFAULT_DROPDOWN_ITEMS: usize = 10;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Settings {
