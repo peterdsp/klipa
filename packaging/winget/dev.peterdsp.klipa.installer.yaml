@@ -9,6 +9,6 @@ InstallModes:
 Installers:
   - Architecture: x64
     InstallerUrl: https://github.com/peterdsp/klipa/releases/download/v0.4.7/klipa-0.4.7-windows-x64-setup.exe
-    InstallerSha256: "7be314233a62b4b06e6a48b9fbc54f9d5fae96454f5da68672d74f956db87094"
+    InstallerSha256: "61fd58396037db8b5345a1439993bf1833c946ebf3cc57625534a026884822b4"
 ManifestType: installer
 ManifestVersion: 1.6.0

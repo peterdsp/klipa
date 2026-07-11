@@ -8,7 +8,7 @@
 # workflow (see scripts/update-package-managers.sh). Do not hand-edit.
 cask "klipa" do
   version "0.4.7"
-  sha256 "1223a29d2ef059f7b68c85ca30cbf4a039f330e8ddc0bf499efdb5f47e5413c7"
+  sha256 "a8aa68867fa32b2f71a780cb62199b46b1155666007850a9e65adb81bd00d831"
 
   url "https://github.com/peterdsp/klipa/releases/download/v#{version}/klipa-#{version}-macos.pkg"
   name "klipa"
