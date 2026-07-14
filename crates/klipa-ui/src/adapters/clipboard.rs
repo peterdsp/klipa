@@ -12,7 +12,6 @@ use std::borrow::Cow;
 use std::io::Cursor;
 use std::sync::Mutex;
 use tokio::sync::Notify;
-use uuid::Uuid;
 
 pub struct ArboardClipboard {
     /// Signature of the last thing we saw, so we don't re-capture the
@@ -52,33 +51,40 @@ impl ArboardClipboard {
 
         // No text -> try an image (screenshots, copied pictures).
         if let Ok(img) = cb.get_image() {
-            let sig = format!("i:{}x{}:{:016x}", img.width, img.height, hash(&img.bytes));
+            let fingerprint = hash(&img.bytes);
+            let sig = format!("i:{}x{}:{:016x}", img.width, img.height, fingerprint);
             if self.is_new(&sig) {
-                if let Some(png) = encode_png(img.width, img.height, &img.bytes) {
-                    // Write the full PNG to disk and keep only a short
-                    // reference id in history, so memory/history stay tiny.
-                    let id = Uuid::new_v4().to_string();
-                    if let Some(path) = paths::image_path(&id) {
-                        if let Some(dir) = path.parent() {
-                            let _ = std::fs::create_dir_all(dir);
-                        }
-                        if std::fs::write(&path, &png).is_ok() {
-                            return Some(PasteboardEvent {
-                                // Leading text label = the readable menu
-                                // line; the image ref is what gets pasted.
-                                contents: vec![
-                                    ItemContent {
-                                        kind: ItemKind::Text,
-                                        value: format!("[Image {}x{}]", img.width, img.height),
-                                    },
-                                    ItemContent {
-                                        kind: ItemKind::Image,
-                                        value: id,
-                                    },
-                                ],
-                                source_application: frontmost_app(),
-                            });
-                        }
+                // Reference id is derived from the image content, so copying
+                // the same image again yields the same id. That lets history
+                // dedupe it (bubbling the existing entry to the top) instead
+                // of stacking duplicates, and reuses the on-disk PNG.
+                let id = image_ref_id(img.width, img.height, fingerprint);
+                if let Some(path) = paths::image_path(&id) {
+                    if let Some(dir) = path.parent() {
+                        let _ = std::fs::create_dir_all(dir);
+                    }
+                    // Only encode + write when we haven't stored this image
+                    // before; a re-copy of a known image skips the disk work.
+                    let ready = path.exists()
+                        || encode_png(img.width, img.height, &img.bytes)
+                            .map(|png| std::fs::write(&path, &png).is_ok())
+                            .unwrap_or(false);
+                    if ready {
+                        return Some(PasteboardEvent {
+                            // Leading text label = the readable menu
+                            // line; the image ref is what gets pasted.
+                            contents: vec![
+                                ItemContent {
+                                    kind: ItemKind::Text,
+                                    value: format!("[Image {}x{}]", img.width, img.height),
+                                },
+                                ItemContent {
+                                    kind: ItemKind::Image,
+                                    value: id,
+                                },
+                            ],
+                            source_application: frontmost_app(),
+                        });
                     }
                 }
             }
@@ -113,6 +119,14 @@ fn frontmost_app() -> Option<String> {
 #[cfg(not(feature = "frontmost"))]
 fn frontmost_app() -> Option<String> {
     None
+}
+
+/// Content-derived reference id for an image entry. Identical images
+/// (same dimensions + content fingerprint) always map to the same id,
+/// which is what lets history dedupe re-copied images instead of
+/// stacking duplicates.
+fn image_ref_id(width: usize, height: usize, fingerprint: u64) -> String {
+    format!("img-{width}x{height}-{fingerprint:016x}")
 }
 
 /// FNV-1a hash - cheap content fingerprint for image dedup.
@@ -202,5 +216,29 @@ impl ClipboardSource for ArboardClipboard {
             arboard::Clipboard::new().map_err(|e| CoreError::Clipboard(e.to_string()))?;
         cb.clear().map_err(|e| CoreError::Clipboard(e.to_string()))?;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn identical_images_share_a_ref_id() {
+        // Same image copied twice -> same id, so history dedupes it.
+        let bytes = [1u8, 2, 3, 4, 5];
+        let a = image_ref_id(100, 200, hash(&bytes));
+        let b = image_ref_id(100, 200, hash(&bytes));
+        assert_eq!(a, b);
+    }
+
+    #[test]
+    fn different_images_get_different_ref_ids() {
+        // Different content (or different size) must not collide.
+        let one = image_ref_id(100, 200, hash(&[1u8, 2, 3]));
+        let two = image_ref_id(100, 200, hash(&[9u8, 9, 9]));
+        let three = image_ref_id(101, 200, hash(&[1u8, 2, 3]));
+        assert_ne!(one, two);
+        assert_ne!(one, three);
     }
 }
