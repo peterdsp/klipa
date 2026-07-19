@@ -307,9 +307,31 @@
   footer{padding:48px 0 60px;text-align:center;color:var(--muted);font-size:14px;border-top:1px solid var(--stroke);margin-top:30px}
   footer a{color:var(--accent2);text-decoration:none}
   footer a:hover{text-decoration:underline}
+
+  /* ───── language switch + animated page transitions ───── */
+  @view-transition{navigation:auto}
+  @media (prefers-reduced-motion: no-preference){
+    ::view-transition-old(root),::view-transition-new(root){animation-duration:320ms;animation-timing-function:ease}
+  }
+  .lang-switch{
+    position:fixed;top:16px;right:16px;z-index:20;display:inline-flex;gap:2px;padding:3px;
+    border:1px solid var(--stroke);border-radius:999px;background:rgba(20,22,27,.72);backdrop-filter:blur(12px);
+  }
+  .lang-btn{
+    all:unset;cursor:pointer;font-size:12px;font-weight:600;color:var(--muted);
+    padding:4px 9px;border-radius:999px;line-height:1;
+  }
+  .lang-btn:hover{color:var(--text)}
+  .lang-btn.active{background:var(--accent);color:#fff}
 </style>
 </head>
 <body>
+
+<div class="lang-switch" role="group" aria-label="Language">
+  <button class="lang-btn" type="button" data-lang="en" title="English">EN</button>
+  <button class="lang-btn" type="button" data-lang="el" title="Ελληνικά">ΕΛ</button>
+  <button class="lang-btn" type="button" data-lang="sq" title="Shqip">SQ</button>
+</div>
 
 <!-- animated background layers -->
 <div class="aurora" aria-hidden="true">
@@ -324,12 +346,12 @@
       <b></b><b></b><b></b>
     </div>
     <h1>klipa</h1>
-    <p class="tag">A tiny, fast <strong>menu bar clipboard manager</strong> for <strong>macOS, Windows &amp; Linux</strong> - with keep-awake sessions. Pure Rust, no WebView, no JavaScript runtime.</p>
+    <p class="tag" data-i18n-html="tag">A tiny, fast <strong>menu bar clipboard manager</strong> for <strong>macOS, Windows &amp; Linux</strong> - with keep-awake sessions. Pure Rust, no WebView, no JavaScript runtime.</p>
     <div class="pills">
       <span class="pill">~25&nbsp;MB RAM</span>
       <span class="pill">~6&nbsp;MB app</span>
-      <span class="pill">Local-only, no network</span>
-      <span class="pill">MIT licensed</span>
+      <span class="pill" data-i18n="pillLocal">Local-only, no network</span>
+      <span class="pill" data-i18n="pillMit">MIT licensed</span>
     </div>
 
     <!-- menubar dropdown demo -->
@@ -383,22 +405,22 @@
           <div class="mb-entry mb-action">Quit klipa</div>
         </div>
       </div>
-      <p class="demo-caption">Click the menu bar icon. Click any entry. Paste. That is the whole app.</p>
+      <p class="demo-caption" data-i18n="demoCaption">Click the menu bar icon. Click any entry. Paste. That is the whole app.</p>
     </div>
   </header>
 
   <section id="download" class="reveal">
-    <p class="ver">Latest release: <b id="version">loading&hellip;</b></p>
+    <p class="ver"><span data-i18n="verLabel">Latest release:</span> <b id="version">loading&hellip;</b></p>
 
     <div class="price-banner">
       <div class="pb-copy">
-        <div class="pb-title"><span class="free">7-day free trial</span>, then &euro;1.99 one-time</div>
-        <div class="pb-sub">No subscription. Pay once, keep it forever. Download the app below - after the trial, buy a license and paste the key into klipa.</div>
+        <div class="pb-title" data-i18n-html="pbTitle"><span class="free">7-day free trial</span>, then &euro;1.99 one-time</div>
+        <div class="pb-sub" data-i18n="pbSub">No subscription. Pay once, keep it forever. Download the app below - after the trial, buy a license and paste the key into klipa.</div>
       </div>
       <div class="pb-buys">
         <a class="buy kofi" href="https://ko-fi.com/s/4e1cf2ac40" target="_blank" rel="noopener" aria-label="Buy klipa on Ko-fi">
           <svg viewBox="0 0 24 24" aria-hidden="true" fill="currentColor"><path d="M18.3 5H4.1C3 5 2 5.9 2 7.1v6.7c0 3.1 2.6 5.7 5.7 5.7h5.7c3 0 5.5-2.4 5.7-5.3.1 0 .1 0 .2 0 2.3 0 4.1-1.8 4.1-4.1S20.7 5 18.4 5h-.1zm0 6.6h-.2V7.4c1.2 0 2.1.9 2.1 2.1 0 1.1-.9 2.1-1.9 2.1zM8.3 8.6c1.1 0 2.1.5 2.7 1.3.6-.8 1.6-1.3 2.7-1.3 1.9 0 3.4 1.5 3.4 3.4 0 2.5-3.2 4.9-6.1 6.5-2.9-1.6-6.1-4-6.1-6.5 0-1.9 1.5-3.4 3.4-3.4z"/></svg>
-          Buy a license on Ko-fi
+          <span data-i18n="buyKofi">Buy a license on Ko-fi</span>
         </a>
       </div>
     </div>
@@ -410,8 +432,8 @@
           <svg viewBox="0 0 24 24"><path d="M12.152 6.896c-.948 0-2.415-1.078-3.96-1.04-2.04.027-3.91 1.183-4.961 3.014-2.117 3.675-.546 9.103 1.519 12.09 1.013 1.454 2.208 3.09 3.792 3.039 1.52-.065 2.09-.987 3.935-.987 1.831 0 2.35.987 3.96.948 1.637-.026 2.676-1.48 3.676-2.948 1.156-1.688 1.636-3.325 1.662-3.415-.039-.013-3.182-1.221-3.22-4.857-.026-3.04 2.48-4.494 2.597-4.559-1.429-2.09-3.623-2.324-4.39-2.376-2-.156-3.675 1.09-4.61 1.09zM15.53 3.83c.843-1.012 1.4-2.427 1.245-3.83-1.207.052-2.662.805-3.532 1.818-.78.896-1.454 2.338-1.273 3.714 1.338.104 2.715-.688 3.559-1.701"/></svg>
           macOS
         </div>
-        <p>Universal (Apple Silicon + Intel). macOS 11+.</p>
-        <a class="btn" id="dl-macos" href="#" target="_blank" rel="noopener">Download .pkg</a>
+        <p data-i18n="macDesc">Universal (Apple Silicon + Intel). macOS 11+.</p>
+        <a class="btn" id="dl-macos" href="#" target="_blank" rel="noopener" data-i18n="dlPkg">Download .pkg</a>
         <div class="alts">
           <a class="btn sub" id="dl-mas" href="https://apps.apple.com/app/id6786092508" target="_blank" rel="noopener">Mac App Store</a>
         </div>
@@ -423,8 +445,8 @@
           <svg viewBox="0 0 24 24"><rect x="2.5" y="2.5" width="9" height="9" rx="0.5"/><rect x="12.5" y="2.5" width="9" height="9" rx="0.5"/><rect x="2.5" y="12.5" width="9" height="9" rx="0.5"/><rect x="12.5" y="12.5" width="9" height="9" rx="0.5"/></svg>
           Windows
         </div>
-        <p>64-bit installer (.exe). Windows 10/11.</p>
-        <a class="btn" id="dl-windows" href="#" target="_blank" rel="noopener">Download installer</a>
+        <p data-i18n="winDesc">64-bit installer (.exe). Windows 10/11.</p>
+        <a class="btn" id="dl-windows" href="#" target="_blank" rel="noopener" data-i18n="dlInstaller">Download installer</a>
       </div>
 
       <!-- Linux -->
@@ -433,16 +455,16 @@
           <svg viewBox="0 0 24 24"><path d="M12.504 0c-.155 0-.315.008-.48.021-4.226.333-3.105 4.807-3.17 6.298-.076 1.092-.3 1.953-1.05 3.02-.885 1.051-2.127 2.75-2.716 4.521-.278.832-.41 1.684-.287 2.489a.424.424 0 00-.11.135c-.26.268-.45.6-.663.839-.199.199-.485.267-.797.4-.313.136-.658.269-.864.68-.09.189-.136.394-.132.602 0 .199.027.4.055.536.058.399.116.728.04.97-.249.68-.28 1.145-.106 1.484.174.334.535.47.94.601.81.2 1.91.135 2.774.6.926.466 1.866.67 2.616.47.526-.116.97-.464 1.208-.946.587-.003 1.23-.269 2.26-.334.699-.058 1.574.267 2.577.2.025.134.063.198.114.333l.003.003c.391.778 1.113 1.132 1.884 1.071.771-.06 1.592-.536 2.257-1.306.631-.765 1.683-1.084 2.378-1.503.348-.199.629-.469.649-.853.023-.4-.2-.811-.714-1.376v-.097l-.003-.003c-.17-.2-.25-.535-.338-.926-.085-.401-.182-.786-.492-1.046h-.003c-.059-.054-.123-.067-.188-.135a.357.357 0 00-.19-.064c.431-1.278.264-2.55-.173-3.694-.533-1.41-1.465-2.638-2.175-3.483-.796-1.005-1.576-1.957-1.56-3.368.026-2.152.236-6.133-3.544-6.139z"/></svg>
           Linux
         </div>
-        <p>x86-64. AppImage runs anywhere; .deb / .rpm / tarball below.</p>
-        <a class="btn" id="dl-appimage" href="#" target="_blank" rel="noopener">Download AppImage</a>
+        <p data-i18n="linuxDesc">x86-64. AppImage runs anywhere; .deb / .rpm / tarball below.</p>
+        <a class="btn" id="dl-appimage" href="#" target="_blank" rel="noopener" data-i18n="dlAppimage">Download AppImage</a>
         <div class="alts">
           <a class="btn sub" id="dl-deb" href="#" target="_blank" rel="noopener">.deb (Debian / Ubuntu)</a>
           <a class="btn sub" id="dl-rpm" href="#" target="_blank" rel="noopener">.rpm (Fedora / RHEL / openSUSE)</a>
-          <a class="btn sub" id="dl-targz" href="#" target="_blank" rel="noopener">.tar.gz (portable)</a>
+          <a class="btn sub" id="dl-targz" href="#" target="_blank" rel="noopener" data-i18n="dlTargz">.tar.gz (portable)</a>
         </div>
       </div>
     </div>
-    <p class="note" style="margin-top:18px">
+    <p class="note" style="margin-top:18px" data-i18n-html="note">
       All builds &amp; checksums on the
       <a id="releases-link" href="https://github.com/peterdsp/klipa/releases" style="color:var(--accent2)">releases page</a>.
       Build from source: <span class="kbd">cargo build --release</span>.
@@ -450,21 +472,21 @@
   </section>
 
   <section class="features reveal">
-    <h2>Why klipa</h2>
+    <h2 data-i18n="featH2">Why klipa</h2>
     <div class="feats">
-      <div class="feat"><h3>Ultralight</h3><p>A 3.6&nbsp;MB native binary (~6&nbsp;MB installed) using ~25&nbsp;MB RAM - no Electron, no browser engine, no GPU renderer.</p></div>
-      <div class="feat"><h3>Menubar dropdown</h3><p>Click the menubar icon and your recent copies drop down. Click one to paste it. That is the whole UI.</p></div>
-      <div class="feat"><h3>Local-only, private</h3><p>Your copies stay in one local file on your device. Nothing is logged, uploaded, or sent anywhere - klipa has no servers and makes no network connections.</p></div>
-      <div class="feat"><h3>Keep-awake sessions</h3><p>Stop your machine from sleeping for 5 min to 5 hours, or indefinitely. Native on all three OSes.</p></div>
-      <div class="feat"><h3>Truly cross-platform</h3><p>The same Rust core and native menubar dropdown on macOS, Windows, and Linux.</p></div>
-      <div class="feat"><h3>Open source</h3><p>MIT licensed. Read it, build it, ship it. <a href="https://github.com/peterdsp/klipa" style="color:var(--accent2)">View on GitHub</a>.</p></div>
+      <div class="feat"><h3 data-i18n="feat1H">Ultralight</h3><p data-i18n-html="feat1P">A 3.6&nbsp;MB native binary (~6&nbsp;MB installed) using ~25&nbsp;MB RAM - no Electron, no browser engine, no GPU renderer.</p></div>
+      <div class="feat"><h3 data-i18n="feat2H">Menubar dropdown</h3><p data-i18n="feat2P">Click the menubar icon and your recent copies drop down. Click one to paste it. That is the whole UI.</p></div>
+      <div class="feat"><h3 data-i18n="feat3H">Local-only, private</h3><p data-i18n="feat3P">Your copies stay in one local file on your device. Nothing is logged, uploaded, or sent anywhere - klipa has no servers and makes no network connections.</p></div>
+      <div class="feat"><h3 data-i18n="feat4H">Keep-awake sessions</h3><p data-i18n="feat4P">Stop your machine from sleeping for 5 min to 5 hours, or indefinitely. Native on all three OSes.</p></div>
+      <div class="feat"><h3 data-i18n="feat5H">Truly cross-platform</h3><p data-i18n="feat5P">The same Rust core and native menubar dropdown on macOS, Windows, and Linux.</p></div>
+      <div class="feat"><h3 data-i18n="feat6H">Open source</h3><p data-i18n-html="feat6P">MIT licensed. Read it, build it, ship it. <a href="https://github.com/peterdsp/klipa" style="color:var(--accent2)">View on GitHub</a>.</p></div>
     </div>
   </section>
 </div>
 
 <footer>
   <div class="wrap">
-    <p>klipa - built by <a href="https://peterdsp.dev">Petros Dhespollari</a> · MIT License ·
+    <p data-i18n-html="footer">klipa - built by <a href="https://peterdsp.dev">Petros Dhespollari</a> · MIT License ·
     <a href="https://github.com/peterdsp/klipa">GitHub</a> ·
     <a href="press.html">Press kit</a> ·
     <a href="privacy.html">Privacy</a></p>
@@ -547,6 +569,159 @@
       ["dl-macos","dl-windows","dl-appimage","dl-deb","dl-rpm","dl-targz"]
         .forEach(id => document.getElementById(id).href = RELEASES);
     });
+</script>
+
+<script>
+  // ── In-place language switch (EN / EL / SQ) with crossfade ──────────
+  (function () {
+    var I18N = {
+      en: {
+        title: "klipa - menu bar clipboard manager for macOS, Windows & Linux",
+        tag: `A tiny, fast <strong>menu bar clipboard manager</strong> for <strong>macOS, Windows &amp; Linux</strong> - with keep-awake sessions. Pure Rust, no WebView, no JavaScript runtime.`,
+        pillLocal: "Local-only, no network",
+        pillMit: "MIT licensed",
+        demoCaption: "Click the menu bar icon. Click any entry. Paste. That is the whole app.",
+        verLabel: "Latest release:",
+        pbTitle: `<span class="free">7-day free trial</span>, then &euro;1.99 one-time`,
+        pbSub: "No subscription. Pay once, keep it forever. Download the app below - after the trial, buy a license and paste the key into klipa.",
+        buyKofi: "Buy a license on Ko-fi",
+        macDesc: "Universal (Apple Silicon + Intel). macOS 11+.",
+        dlPkg: "Download .pkg",
+        winDesc: "64-bit installer (.exe). Windows 10/11.",
+        dlInstaller: "Download installer",
+        linuxDesc: "x86-64. AppImage runs anywhere; .deb / .rpm / tarball below.",
+        dlAppimage: "Download AppImage",
+        dlTargz: ".tar.gz (portable)",
+        note: `All builds &amp; checksums on the <a id="releases-link" href="https://github.com/peterdsp/klipa/releases" style="color:var(--accent2)">releases page</a>. Build from source: <span class="kbd">cargo build --release</span>.`,
+        featH2: "Why klipa",
+        feat1H: "Ultralight",
+        feat1P: `A 3.6&nbsp;MB native binary (~6&nbsp;MB installed) using ~25&nbsp;MB RAM - no Electron, no browser engine, no GPU renderer.`,
+        feat2H: "Menubar dropdown",
+        feat2P: "Click the menubar icon and your recent copies drop down. Click one to paste it. That is the whole UI.",
+        feat3H: "Local-only, private",
+        feat3P: "Your copies stay in one local file on your device. Nothing is logged, uploaded, or sent anywhere - klipa has no servers and makes no network connections.",
+        feat4H: "Keep-awake sessions",
+        feat4P: "Stop your machine from sleeping for 5 min to 5 hours, or indefinitely. Native on all three OSes.",
+        feat5H: "Truly cross-platform",
+        feat5P: "The same Rust core and native menubar dropdown on macOS, Windows, and Linux.",
+        feat6H: "Open source",
+        feat6P: `MIT licensed. Read it, build it, ship it. <a href="https://github.com/peterdsp/klipa" style="color:var(--accent2)">View on GitHub</a>.`,
+        footer: `klipa - built by <a href="https://peterdsp.dev">Petros Dhespollari</a> · MIT License · <a href="https://github.com/peterdsp/klipa">GitHub</a> · <a href="press.html">Press kit</a> · <a href="privacy.html">Privacy</a>`,
+      },
+      el: {
+        title: "klipa - διαχειριστής προχείρου στη γραμμή μενού για macOS, Windows & Linux",
+        tag: `Ένας μικροσκοπικός, γρήγορος <strong>διαχειριστής προχείρου στη γραμμή μενού</strong> για <strong>macOS, Windows &amp; Linux</strong> - με συνεδρίες keep-awake. Καθαρή Rust, χωρίς WebView, χωρίς JavaScript runtime.`,
+        pillLocal: "Μόνο τοπικά, χωρίς δίκτυο",
+        pillMit: "Άδεια MIT",
+        demoCaption: "Κάνε κλικ στο εικονίδιο της γραμμής μενού. Κάνε κλικ σε οποιαδήποτε καταχώρηση. Επικόλλησε. Αυτή είναι όλη η εφαρμογή.",
+        verLabel: "Τελευταία έκδοση:",
+        pbTitle: `<span class="free">7 ημέρες δωρεάν δοκιμή</span>, μετά &euro;1.99 μία φορά`,
+        pbSub: "Χωρίς συνδρομή. Πλήρωσε μία φορά, κράτησέ το για πάντα. Κατέβασε την εφαρμογή παρακάτω - μετά τη δοκιμή, αγόρασε μια άδεια και επικόλλησε το κλειδί στο klipa.",
+        buyKofi: "Αγόρασε άδεια στο Ko-fi",
+        macDesc: "Universal (Apple Silicon + Intel). macOS 11+.",
+        dlPkg: "Λήψη .pkg",
+        winDesc: "Εγκαταστάτης 64-bit (.exe). Windows 10/11.",
+        dlInstaller: "Λήψη εγκαταστάτη",
+        linuxDesc: "x86-64. Το AppImage τρέχει παντού· .deb / .rpm / tarball παρακάτω.",
+        dlAppimage: "Λήψη AppImage",
+        dlTargz: ".tar.gz (φορητό)",
+        note: `Όλα τα builds &amp; checksums στη <a id="releases-link" href="https://github.com/peterdsp/klipa/releases" style="color:var(--accent2)">σελίδα εκδόσεων</a>. Χτίσιμο από τον κώδικα: <span class="kbd">cargo build --release</span>.`,
+        featH2: "Γιατί klipa",
+        feat1H: "Εξαιρετικά ελαφρύ",
+        feat1P: `Ένα εγγενές binary 3.6&nbsp;MB (~6&nbsp;MB εγκατεστημένο) που χρησιμοποιεί ~25&nbsp;MB RAM - χωρίς Electron, χωρίς μηχανή περιήγησης, χωρίς GPU renderer.`,
+        feat2H: "Μενού στη γραμμή μενού",
+        feat2P: "Κάνε κλικ στο εικονίδιο της γραμμής μενού και τα πρόσφατα αντίγραφά σου εμφανίζονται. Κάνε κλικ σε ένα για να το επικολλήσεις. Αυτό είναι όλο το περιβάλλον.",
+        feat3H: "Μόνο τοπικά, ιδιωτικό",
+        feat3P: "Τα αντίγραφά σου μένουν σε ένα τοπικό αρχείο στη συσκευή σου. Τίποτα δεν καταγράφεται, ανεβαίνει ή στέλνεται πουθενά - το klipa δεν έχει διακομιστές και δεν κάνει καμία σύνδεση δικτύου.",
+        feat4H: "Συνεδρίες keep-awake",
+        feat4P: "Εμπόδισε τη συσκευή σου να κοιμηθεί για 5 λεπτά έως 5 ώρες, ή επ' αόριστον. Εγγενές και στα τρία λειτουργικά.",
+        feat5H: "Πραγματικά πολυπλατφορμικό",
+        feat5P: "Ο ίδιος πυρήνας Rust και το εγγενές μενού στη γραμμή μενού σε macOS, Windows και Linux.",
+        feat6H: "Ανοιχτού κώδικα",
+        feat6P: `Άδεια MIT. Διάβασέ το, χτίσε το, διάθεσέ το. <a href="https://github.com/peterdsp/klipa" style="color:var(--accent2)">Δες το στο GitHub</a>.`,
+        footer: `klipa - φτιαγμένο από τον <a href="https://peterdsp.dev">Petros Dhespollari</a> · Άδεια MIT · <a href="https://github.com/peterdsp/klipa">GitHub</a> · <a href="press.html">Υλικό Τύπου</a> · <a href="privacy.html">Απόρρητο</a>`,
+      },
+      sq: {
+        title: "klipa - menaxher i clipboard-it në shiritin e menysë për macOS, Windows & Linux",
+        tag: `Një menaxher <strong>clipboard-i i vogël dhe i shpejtë në shiritin e menysë</strong> për <strong>macOS, Windows &amp; Linux</strong> - me sesione keep-awake. Rust i pastër, pa WebView, pa JavaScript runtime.`,
+        pillLocal: "Vetëm lokal, pa rrjet",
+        pillMit: "Licencë MIT",
+        demoCaption: "Kliko ikonën në shiritin e menysë. Kliko çdo hyrje. Ngjit. Kjo është e gjithë aplikacioni.",
+        verLabel: "Versioni i fundit:",
+        pbTitle: `<span class="free">7 ditë provë falas</span>, pastaj &euro;1.99 një herë`,
+        pbSub: "Pa abonim. Paguaj një herë, mbaje përgjithmonë. Shkarko aplikacionin më poshtë - pas provës, bli një licencë dhe ngjit çelësin në klipa.",
+        buyKofi: "Bli një licencë në Ko-fi",
+        macDesc: "Universal (Apple Silicon + Intel). macOS 11+.",
+        dlPkg: "Shkarko .pkg",
+        winDesc: "Instalues 64-bit (.exe). Windows 10/11.",
+        dlInstaller: "Shkarko instaluesin",
+        linuxDesc: "x86-64. AppImage funksionon kudo; .deb / .rpm / tarball më poshtë.",
+        dlAppimage: "Shkarko AppImage",
+        dlTargz: ".tar.gz (portativ)",
+        note: `Të gjitha ndërtimet &amp; checksums në <a id="releases-link" href="https://github.com/peterdsp/klipa/releases" style="color:var(--accent2)">faqen e versioneve</a>. Ndërto nga burimi: <span class="kbd">cargo build --release</span>.`,
+        featH2: "Pse klipa",
+        feat1H: "Ultra i lehtë",
+        feat1P: `Një binar vendas prej 3.6&nbsp;MB (~6&nbsp;MB i instaluar) që përdor ~25&nbsp;MB RAM - pa Electron, pa motor shfletuesi, pa GPU renderer.`,
+        feat2H: "Menu në shiritin e menysë",
+        feat2P: "Kliko ikonën në shiritin e menysë dhe kopjimet e fundit shfaqen. Kliko një për ta ngjitur. Kjo është e gjithë ndërfaqja.",
+        feat3H: "Vetëm lokal, privat",
+        feat3P: "Kopjimet e tua qëndrojnë në një skedar lokal në pajisjen tënde. Asgjë nuk regjistrohet, ngarkohet ose dërgohet askund - klipa nuk ka servera dhe nuk bën asnjë lidhje rrjeti.",
+        feat4H: "Sesione keep-awake",
+        feat4P: "Ndalo makinën tënde nga gjumi për 5 minuta deri në 5 orë, ose pafundësisht. Vendase në të tria sistemet operative.",
+        feat5H: "Vërtet ndërplatformëshe",
+        feat5P: "I njëjti bërthamë Rust dhe menu vendase në shiritin e menysë në macOS, Windows dhe Linux.",
+        feat6H: "Kod i hapur",
+        feat6P: `Licencë MIT. Lexoje, ndërtoje, shpërndaje. <a href="https://github.com/peterdsp/klipa" style="color:var(--accent2)">Shikoje në GitHub</a>.`,
+        footer: `klipa - ndërtuar nga <a href="https://peterdsp.dev">Petros Dhespollari</a> · Licencë MIT · <a href="https://github.com/peterdsp/klipa">GitHub</a> · <a href="press.html">Materialet për shtypin</a> · <a href="privacy.html">Privatësia</a>`,
+      },
+    };
+
+    function detect() {
+      try { var s = localStorage.getItem("klipa_site_lang"); if (s && I18N[s]) return s; } catch (e) {}
+      var n = (navigator.language || "en").toLowerCase();
+      if (n.indexOf("el") === 0) return "el";
+      if (n.indexOf("sq") === 0) return "sq";
+      return "en";
+    }
+    function apply(lang) {
+      var d = I18N[lang] || I18N.en;
+      document.querySelectorAll("[data-i18n]").forEach(function (el) {
+        var v = d[el.getAttribute("data-i18n")];
+        if (v != null) el.textContent = v;
+      });
+      document.querySelectorAll("[data-i18n-html]").forEach(function (el) {
+        var v = d[el.getAttribute("data-i18n-html")];
+        if (v != null) el.innerHTML = v;
+      });
+      document.documentElement.lang = lang;
+      if (d.title) document.title = d.title;
+      document.querySelectorAll(".lang-btn").forEach(function (b) {
+        var on = b.getAttribute("data-lang") === lang;
+        b.classList.toggle("active", on);
+        b.setAttribute("aria-pressed", String(on));
+      });
+      try { localStorage.setItem("klipa_site_lang", lang); } catch (e) {}
+    }
+    function reduce() { return window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches; }
+    function sw(lang) {
+      if (!reduce() && document.startViewTransition) { document.startViewTransition(function () { apply(lang); }); }
+      else { apply(lang); }
+    }
+    document.querySelectorAll(".lang-btn").forEach(function (b) {
+      b.addEventListener("click", function () { sw(b.getAttribute("data-lang")); });
+    });
+    apply(detect());
+
+    // Prefetch same-origin pages so navigation between pages has no wait.
+    try {
+      if (HTMLScriptElement.supports && HTMLScriptElement.supports("speculationrules")) {
+        var sr = document.createElement("script");
+        sr.type = "speculationrules";
+        sr.textContent = '{"prefetch":[{"source":"document","where":{"href_matches":"/*"},"eagerness":"moderate"}]}';
+        document.head.appendChild(sr);
+      }
+    } catch (e) {}
+  })();
 </script>
 </body>
 </html>

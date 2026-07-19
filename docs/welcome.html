@@ -62,61 +62,77 @@
   }
   .cta a:hover{filter:brightness(1.08)}
   footer{text-align:center;color:var(--muted);font-size:13px;margin-top:44px}
+
+  @view-transition{navigation:auto}
+  @media (prefers-reduced-motion: no-preference){
+    ::view-transition-old(root),::view-transition-new(root){animation-duration:320ms;animation-timing-function:ease}
+  }
+  .lang-switch{position:fixed;top:16px;right:16px;z-index:20;display:inline-flex;gap:2px;padding:3px;border:1px solid var(--stroke);border-radius:999px;background:rgba(20,22,27,.72);backdrop-filter:blur(12px)}
+  .lang-btn{all:unset;cursor:pointer;font-size:12px;font-weight:600;color:var(--muted);padding:4px 9px;border-radius:999px;line-height:1}
+  .lang-btn:hover{color:var(--text)}
+  .lang-btn.active{background:var(--accent);color:#fff}
 </style>
 </head>
 <body>
+
+<div class="lang-switch" role="group" aria-label="Language">
+  <button class="lang-btn" type="button" data-lang="en" title="English">EN</button>
+  <button class="lang-btn" type="button" data-lang="el" title="Ελληνικά">ΕΛ</button>
+  <button class="lang-btn" type="button" data-lang="sq" title="Shqip">SQ</button>
+</div>
+
 <div class="wrap">
   <header>
     <img class="logo" src="assets/icon.png" alt="klipa" />
-    <h1>Welcome to klipa</h1>
-    <p class="lead">A 2-minute walkthrough. klipa is running right now -
+    <h1 data-i18n="wTitle">Welcome to klipa</h1>
+    <p class="lead" data-i18n-html="lead">A 2-minute walkthrough. klipa is running right now -
     and it already works out of the box. Everything below is
     <b>optional</b>: the defaults are set up for you, so you can close
     this and just start copying if you like.</p>
   </header>
 
   <div class="step">
-    <span class="num">1</span><h2>Look up at your menu bar</h2>
-    <p>klipa runs as a tiny clipboard icon in the top-right of your screen,
+    <span class="num">1</span><h2 data-i18n="s1H">Look up at your menu bar</h2>
+    <p data-i18n="s1P">klipa runs as a tiny clipboard icon in the top-right of your screen,
     next to Wi-Fi and the clock. There is no window, no dock icon, no
     onboarding form. If you can see the clipboard glyph up there, you are
     all set.</p>
   </div>
 
   <div class="step">
-    <span class="num">2</span><h2>Click it to see your clipboard history</h2>
-    <p>Every time you copy something (text, an image, anything), klipa
+    <span class="num">2</span><h2 data-i18n="s2H">Click it to see your clipboard history</h2>
+    <p data-i18n-html="s2P1">Every time you copy something (text, an image, anything), klipa
     remembers it. Click the menu bar icon, and your last few entries drop
     down. Click any entry to copy it back to the clipboard. Then paste
     like you normally would (<span class="kbd">⌘ V</span>).</p>
-    <p>Want more (or fewer) entries in that list? Open <b>Show in
+    <p data-i18n-html="s2P2">Want more (or fewer) entries in that list? Open <b>Show in
     dropdown</b> and pick 10, 25, 50, or 100. Default is 25.</p>
   </div>
 
   <div class="step">
-    <span class="num">3</span><h2>Optional: swap the icon for date or temperature</h2>
-    <p>Under <b>Menu bar</b> in the dropdown, pick what appears in the
+    <span class="num">3</span><h2 data-i18n="s3H">Optional: swap the icon for date or temperature</h2>
+    <p data-i18n-html="s3P1">Under <b>Menu bar</b> in the dropdown, pick what appears in the
     status bar. Three options besides the default clipboard glyph:</p>
     <ul>
-      <li><b>Date</b> - today's short date, e.g. <span class="kbd">Wed 30</span>.</li>
-      <li><b>Temperature</b> - current temperature at your location.</li>
-      <li><b>Date + Temperature</b> - both.</li>
+      <li data-i18n-html="s3li1"><b>Date</b> - today's short date, e.g. <span class="kbd">Wed 30</span>.</li>
+      <li data-i18n-html="s3li2"><b>Temperature</b> - current temperature at your location.</li>
+      <li data-i18n-html="s3li3"><b>Date + Temperature</b> - both.</li>
     </ul>
-    <p>The temperature modes make two small HTTPS calls (approximate
+    <p data-i18n="s3P2">The temperature modes make two small HTTPS calls (approximate
     location from IP, current temperature from open-meteo). Icon-only and
     Date make zero network calls.</p>
   </div>
 
   <div class="step">
-    <span class="num">4</span><h2>Keep your Mac awake when you need to</h2>
-    <p>The <b>Keep awake</b> submenu stops the machine from sleeping for
+    <span class="num">4</span><h2 data-i18n="s4H">Keep your Mac awake when you need to</h2>
+    <p data-i18n-html="s4P">The <b>Keep awake</b> submenu stops the machine from sleeping for
     5 min up to 5 hours, or indefinitely. Toggle it on when you are on a
     long download or a video call and turn it off when you are done.</p>
   </div>
 
   <div class="step">
-    <span class="num">5</span><h2>7-day free trial, then a one-time €1.99</h2>
-    <p>The direct-download build is free in full for 7 days. After that
+    <span class="num">5</span><h2 data-i18n="s5H">7-day free trial, then a one-time €1.99</h2>
+    <p data-i18n-html="s5P">The direct-download build is free in full for 7 days. After that
     an <b>Unlock full version</b> item appears in the menu; buy once on
     <a href="https://ko-fi.com/s/4e1cf2ac40">Ko-fi</a> and you are emailed
     your signed license (a short block of text, also attached as a
@@ -126,13 +142,96 @@
     handles payment through Apple instead, so it has no trial at all.</p>
   </div>
 
-  <p class="cta"><a href="index.html">Take me to klipa</a></p>
+  <p class="cta"><a href="index.html" data-i18n="ctaBtn">Take me to klipa</a></p>
 
-  <footer>
+  <footer data-i18n-html="wFooter">
     Questions or bugs: <a href="https://github.com/peterdsp/klipa/issues">GitHub Issues</a>
     &nbsp;&middot;&nbsp;
     <a href="privacy.html">Privacy Policy</a>
   </footer>
 </div>
+
+<script>
+  (function () {
+    var I18N = {
+      en: {
+        wTitle: "Welcome to klipa",
+        lead: `A 2-minute walkthrough. klipa is running right now - and it already works out of the box. Everything below is <b>optional</b>: the defaults are set up for you, so you can close this and just start copying if you like.`,
+        s1H: "Look up at your menu bar",
+        s1P: "klipa runs as a tiny clipboard icon in the top-right of your screen, next to Wi-Fi and the clock. There is no window, no dock icon, no onboarding form. If you can see the clipboard glyph up there, you are all set.",
+        s2H: "Click it to see your clipboard history",
+        s2P1: `Every time you copy something (text, an image, anything), klipa remembers it. Click the menu bar icon, and your last few entries drop down. Click any entry to copy it back to the clipboard. Then paste like you normally would (<span class="kbd">⌘ V</span>).`,
+        s2P2: `Want more (or fewer) entries in that list? Open <b>Show in dropdown</b> and pick 10, 25, 50, or 100. Default is 25.`,
+        s3H: "Optional: swap the icon for date or temperature",
+        s3P1: `Under <b>Menu bar</b> in the dropdown, pick what appears in the status bar. Three options besides the default clipboard glyph:`,
+        s3li1: `<b>Date</b> - today's short date, e.g. <span class="kbd">Wed 30</span>.`,
+        s3li2: `<b>Temperature</b> - current temperature at your location.`,
+        s3li3: `<b>Date + Temperature</b> - both.`,
+        s3P2: "The temperature modes make two small HTTPS calls (approximate location from IP, current temperature from open-meteo). Icon-only and Date make zero network calls.",
+        s4H: "Keep your Mac awake when you need to",
+        s4P: `The <b>Keep awake</b> submenu stops the machine from sleeping for 5 min up to 5 hours, or indefinitely. Toggle it on when you are on a long download or a video call and turn it off when you are done.`,
+        s5H: "7-day free trial, then a one-time €1.99",
+        s5P: `The direct-download build is free in full for 7 days. After that an <b>Unlock full version</b> item appears in the menu; buy once on <a href="https://ko-fi.com/s/4e1cf2ac40">Ko-fi</a> and you are emailed your signed license (a short block of text, also attached as a <code>.klipa</code> file). To activate, copy that license to your clipboard and click <b>Activate</b> - klipa verifies it offline and unlocks, yours forever, no subscription. The Mac App Store build handles payment through Apple instead, so it has no trial at all.`,
+        ctaBtn: "Take me to klipa",
+        wFooter: `Questions or bugs: <a href="https://github.com/peterdsp/klipa/issues">GitHub Issues</a> &nbsp;&middot;&nbsp; <a href="privacy.html">Privacy Policy</a>`,
+      },
+      el: {
+        wTitle: "Καλώς ήρθες στο klipa",
+        lead: `Μια περιήγηση 2 λεπτών. Το klipa τρέχει αυτή τη στιγμή - και ήδη λειτουργεί από την πρώτη στιγμή. Όλα τα παρακάτω είναι <b>προαιρετικά</b>: οι προεπιλογές είναι έτοιμες για σένα, οπότε μπορείς να το κλείσεις και απλώς να αρχίσεις να αντιγράφεις αν θέλεις.`,
+        s1H: "Κοίτα ψηλά στη γραμμή μενού",
+        s1P: "Το klipa τρέχει ως ένα μικροσκοπικό εικονίδιο προχείρου πάνω δεξιά στην οθόνη σου, δίπλα στο Wi-Fi και το ρολόι. Δεν υπάρχει παράθυρο, ούτε εικονίδιο dock, ούτε φόρμα εισαγωγής. Αν βλέπεις το σύμβολο του προχείρου εκεί πάνω, είσαι έτοιμος.",
+        s2H: "Κάνε κλικ για να δεις το ιστορικό του προχείρου σου",
+        s2P1: `Κάθε φορά που αντιγράφεις κάτι (κείμενο, εικόνα, οτιδήποτε), το klipa το θυμάται. Κάνε κλικ στο εικονίδιο της γραμμής μενού και οι τελευταίες καταχωρήσεις σου εμφανίζονται. Κάνε κλικ σε οποιαδήποτε για να την αντιγράψεις πάλι στο πρόχειρο. Μετά επικόλλησε όπως συνήθως (<span class="kbd">⌘ V</span>).`,
+        s2P2: `Θέλεις περισσότερες (ή λιγότερες) καταχωρήσεις σε αυτή τη λίστα; Άνοιξε το <b>Show in dropdown</b> και διάλεξε 10, 25, 50 ή 100. Προεπιλογή είναι το 25.`,
+        s3H: "Προαιρετικό: άλλαξε το εικονίδιο με ημερομηνία ή θερμοκρασία",
+        s3P1: `Κάτω από το <b>Menu bar</b> στο μενού, διάλεξε τι εμφανίζεται στη γραμμή κατάστασης. Τρεις επιλογές εκτός από το προεπιλεγμένο σύμβολο προχείρου:`,
+        s3li1: `<b>Ημερομηνία</b> - η σημερινή σύντομη ημερομηνία, π.χ. <span class="kbd">Wed 30</span>.`,
+        s3li2: `<b>Θερμοκρασία</b> - η τρέχουσα θερμοκρασία στην τοποθεσία σου.`,
+        s3li3: `<b>Ημερομηνία + Θερμοκρασία</b> - και τα δύο.`,
+        s3P2: "Οι λειτουργίες θερμοκρασίας κάνουν δύο μικρές κλήσεις HTTPS (κατά προσέγγιση τοποθεσία από IP, τρέχουσα θερμοκρασία από το open-meteo). Οι λειτουργίες μόνο-εικονίδιο και Ημερομηνία δεν κάνουν καμία κλήση δικτύου.",
+        s4H: "Κράτα τον Mac σου ξύπνιο όταν το χρειάζεσαι",
+        s4P: `Το υπομενού <b>Keep awake</b> εμποδίζει τη συσκευή να κοιμηθεί για 5 λεπτά έως 5 ώρες, ή επ' αόριστον. Ενεργοποίησέ το όταν κάνεις μια μεγάλη λήψη ή μια βιντεοκλήση και απενεργοποίησέ το όταν τελειώσεις.`,
+        s5H: "7 ημέρες δωρεάν δοκιμή, μετά €1.99 μία φορά",
+        s5P: `Η έκδοση άμεσης λήψης είναι πλήρως δωρεάν για 7 ημέρες. Μετά από αυτό, εμφανίζεται ένα στοιχείο <b>Unlock full version</b> στο μενού· αγόρασέ το μία φορά στο <a href="https://ko-fi.com/s/4e1cf2ac40">Ko-fi</a> και σου αποστέλλεται με email η υπογεγραμμένη άδειά σου (ένα σύντομο μπλοκ κειμένου, επίσης συνημμένο ως αρχείο <code>.klipa</code>). Για να την ενεργοποιήσεις, αντίγραψε αυτή την άδεια στο πρόχειρό σου και κάνε κλικ στο <b>Activate</b> - το klipa την επαληθεύει εκτός σύνδεσης και ξεκλειδώνει, δικό σου για πάντα, χωρίς συνδρομή. Η έκδοση του Mac App Store διαχειρίζεται την πληρωμή μέσω Apple, οπότε δεν έχει καθόλου δοκιμή.`,
+        ctaBtn: "Πήγαινέ με στο klipa",
+        wFooter: `Ερωτήσεις ή σφάλματα: <a href="https://github.com/peterdsp/klipa/issues">GitHub Issues</a> &nbsp;&middot;&nbsp; <a href="privacy.html">Πολιτική Απορρήτου</a>`,
+      },
+      sq: {
+        wTitle: "Mirë se erdhe në klipa",
+        lead: `Një udhëzim 2-minutësh. klipa po funksionon tani - dhe punon menjëherë pa konfigurim. Gjithçka më poshtë është <b>opsionale</b>: parazgjedhjet janë gati për ty, kështu që mund ta mbyllësh këtë dhe thjesht të fillosh të kopjosh nëse do.`,
+        s1H: "Shiko lart te shiriti i menysë",
+        s1P: "klipa funksionon si një ikonë e vogël clipboard-i lart djathtas në ekranin tënd, pranë Wi-Fi dhe orës. Nuk ka dritare, as ikonë dock, as formular hyrjeje. Nëse e sheh simbolin e clipboard-it atje lart, je gati.",
+        s2H: "Kliko atë për të parë historikun e clipboard-it tënd",
+        s2P1: `Çdo herë që kopjon diçka (tekst, një imazh, çfarëdo), klipa e mban mend. Kliko ikonën në shiritin e menysë dhe hyrjet e tua të fundit shfaqen. Kliko çdo hyrje për ta kopjuar përsëri në clipboard. Pastaj ngjit si zakonisht (<span class="kbd">⌘ V</span>).`,
+        s2P2: `Do më shumë (ose më pak) hyrje në atë listë? Hap <b>Show in dropdown</b> dhe zgjidh 10, 25, 50 ose 100. Parazgjedhja është 25.`,
+        s3H: "Opsionale: ndërro ikonën me datë ose temperaturë",
+        s3P1: `Nën <b>Menu bar</b> në menu, zgjidh çfarë shfaqet në shiritin e statusit. Tri opsione përveç simbolit të parazgjedhur të clipboard-it:`,
+        s3li1: `<b>Data</b> - data e shkurtër e sotme, p.sh. <span class="kbd">Wed 30</span>.`,
+        s3li2: `<b>Temperatura</b> - temperatura aktuale në vendndodhjen tënde.`,
+        s3li3: `<b>Data + Temperatura</b> - të dyja.`,
+        s3P2: "Modalitetet e temperaturës bëjnë dy thirrje të vogla HTTPS (vendndodhje e përafërt nga IP, temperatura aktuale nga open-meteo). Modalitetet vetëm-ikonë dhe Data nuk bëjnë asnjë thirrje rrjeti.",
+        s4H: "Mbaje Mac-un tënd zgjuar kur të duhet",
+        s4P: `Nënmenyja <b>Keep awake</b> ndalon makinën nga gjumi për 5 minuta deri në 5 orë, ose pafundësisht. Aktivizoje kur je në një shkarkim të gjatë ose një videothirrje dhe çaktivizoje kur mbaron.`,
+        s5H: "7 ditë provë falas, pastaj €1.99 një herë",
+        s5P: `Versioni me shkarkim të drejtpërdrejtë është plotësisht falas për 7 ditë. Pas kësaj, një element <b>Unlock full version</b> shfaqet në menu; blije një herë në <a href="https://ko-fi.com/s/4e1cf2ac40">Ko-fi</a> dhe të dërgohet me email licenca jote e nënshkruar (një bllok i shkurtër teksti, gjithashtu i bashkangjitur si skedar <code>.klipa</code>). Për ta aktivizuar, kopjo atë licencë në clipboard-in tënd dhe kliko <b>Activate</b> - klipa e verifikon atë jashtë linje dhe e shkyç, jotja përgjithmonë, pa abonim. Versioni i Mac App Store e trajton pagesën përmes Apple, kështu që nuk ka fare provë.`,
+        ctaBtn: "Më ço te klipa",
+        wFooter: `Pyetje ose gabime: <a href="https://github.com/peterdsp/klipa/issues">GitHub Issues</a> &nbsp;&middot;&nbsp; <a href="privacy.html">Politika e Privatësisë</a>`,
+      },
+    };
+    function detect(){ try{var s=localStorage.getItem("klipa_site_lang"); if(s&&I18N[s])return s;}catch(e){} var n=(navigator.language||"en").toLowerCase(); if(n.indexOf("el")===0)return "el"; if(n.indexOf("sq")===0)return "sq"; return "en"; }
+    function apply(lang){ var d=I18N[lang]||I18N.en;
+      document.querySelectorAll("[data-i18n]").forEach(function(el){var v=d[el.getAttribute("data-i18n")]; if(v!=null)el.textContent=v;});
+      document.querySelectorAll("[data-i18n-html]").forEach(function(el){var v=d[el.getAttribute("data-i18n-html")]; if(v!=null)el.innerHTML=v;});
+      document.documentElement.lang=lang; if(d.wTitle)document.title=d.wTitle;
+      document.querySelectorAll(".lang-btn").forEach(function(b){var on=b.getAttribute("data-lang")===lang; b.classList.toggle("active",on); b.setAttribute("aria-pressed",String(on));});
+      try{localStorage.setItem("klipa_site_lang",lang);}catch(e){}
+    }
+    function reduce(){return window.matchMedia&&window.matchMedia("(prefers-reduced-motion: reduce)").matches;}
+    function sw(lang){ if(!reduce()&&document.startViewTransition){document.startViewTransition(function(){apply(lang);});} else {apply(lang);} }
+    document.querySelectorAll(".lang-btn").forEach(function(b){b.addEventListener("click",function(){sw(b.getAttribute("data-lang"));});});
+    apply(detect());
+    try{ if(HTMLScriptElement.supports&&HTMLScriptElement.supports("speculationrules")){var sr=document.createElement("script");sr.type="speculationrules";sr.textContent='{"prefetch":[{"source":"document","where":{"href_matches":"/*"},"eagerness":"moderate"}]}';document.head.appendChild(sr);} }catch(e){}
+  })();
+</script>
 </body>
 </html>

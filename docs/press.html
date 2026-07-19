@@ -137,77 +137,92 @@
   footer{margin-top:64px;padding-top:22px;border-top:1px solid var(--stroke);
     text-align:center;color:var(--muted);font-size:13px}
   footer a{color:var(--accent2)}
+
+  @view-transition{navigation:auto}
+  @media (prefers-reduced-motion: no-preference){
+    ::view-transition-old(root),::view-transition-new(root){animation-duration:320ms;animation-timing-function:ease}
+  }
+  .lang-switch{position:fixed;top:16px;right:16px;z-index:20;display:inline-flex;gap:2px;padding:3px;border:1px solid var(--stroke);border-radius:999px;background:rgba(20,22,27,.72);backdrop-filter:blur(12px)}
+  .lang-btn{all:unset;cursor:pointer;font-size:12px;font-weight:600;color:var(--muted);padding:4px 9px;border-radius:999px;line-height:1}
+  .lang-btn:hover{color:var(--text)}
+  .lang-btn.active{background:var(--accent);color:#fff}
 </style>
 </head>
 <body>
+
+<div class="lang-switch" role="group" aria-label="Language">
+  <button class="lang-btn" type="button" data-lang="en" title="English">EN</button>
+  <button class="lang-btn" type="button" data-lang="el" title="Ελληνικά">ΕΛ</button>
+  <button class="lang-btn" type="button" data-lang="sq" title="Shqip">SQ</button>
+</div>
+
 <div class="wrap">
 
   <header>
-    <span class="eyebrow">Press &middot; Media kit</span>
-    <h1>klipa press kit</h1>
-    <p class="lede">Everything you need to write about, review, or cover klipa: a boilerplate paragraph, a one-page fact sheet, product screenshots at native resolution, brand assets and press contact.</p>
+    <span class="eyebrow" data-i18n="eyebrow">Press &middot; Media kit</span>
+    <h1 data-i18n="h1">klipa press kit</h1>
+    <p class="lede" data-i18n="lede">Everything you need to write about, review, or cover klipa: a boilerplate paragraph, a one-page fact sheet, product screenshots at native resolution, brand assets and press contact.</p>
 
     <div class="hero-actions">
       <a class="btn primary" href="assets/press/klipa-press-kit.zip" download>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M5 21h14"/></svg>
-        Download press kit (ZIP, 1.7 MB)
+        <span data-i18n="btnDownload">Download press kit (ZIP, 1.7 MB)</span>
       </a>
       <a class="btn" href="mailto:info@peterdsp.dev">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg>
-        Email press contact
+        <span data-i18n="btnEmail">Email press contact</span>
       </a>
     </div>
 
     <nav class="toc" aria-label="Sections">
-      <a href="#about">About</a>
-      <a href="#facts">Fact sheet</a>
-      <a href="#media">Media</a>
-      <a href="#contact">Contact</a>
+      <a href="#about" data-i18n="tocAbout">About</a>
+      <a href="#facts" data-i18n="tocFacts">Fact sheet</a>
+      <a href="#media" data-i18n="tocMedia">Media</a>
+      <a href="#contact" data-i18n="tocContact">Contact</a>
     </nav>
   </header>
 
   <section id="about">
-    <h2>About klipa</h2>
+    <h2 data-i18n="aboutH2">About klipa</h2>
     <div class="boilerplate">
-      <p>klipa is a native menu bar clipboard manager for macOS, Windows and Linux. Every copy is kept as one entry in a native menu bar dropdown - text and images alike - and clicking any entry copies it back so you can paste it. klipa also offers keep-awake sessions to stop your machine from sleeping, and can optionally show the date, the current temperature at your location, or both next to its status bar icon.</p>
-      <p>klipa is about 3.6 MB (roughly 6 MB installed) and uses about 25 MB of RAM. It is written in pure Rust with no Electron, no WebView and no JavaScript runtime. Your clipboard history stays on your device: klipa has no accounts, no cloud sync and no telemetry. It is MIT licensed, with a 7-day free trial and a one-time &euro;1.99 unlock, and is also available on the Mac App Store, Homebrew, Scoop, winget and AUR.</p>
+      <p data-i18n="boiler1">klipa is a native menu bar clipboard manager for macOS, Windows and Linux. Every copy is kept as one entry in a native menu bar dropdown - text and images alike - and clicking any entry copies it back so you can paste it. klipa also offers keep-awake sessions to stop your machine from sleeping, and can optionally show the date, the current temperature at your location, or both next to its status bar icon.</p>
+      <p data-i18n-html="boiler2">klipa is about 3.6 MB (roughly 6 MB installed) and uses about 25 MB of RAM. It is written in pure Rust with no Electron, no WebView and no JavaScript runtime. Your clipboard history stays on your device: klipa has no accounts, no cloud sync and no telemetry. It is MIT licensed, with a 7-day free trial and a one-time &euro;1.99 unlock, and is also available on the Mac App Store, Homebrew, Scoop, winget and AUR.</p>
     </div>
   </section>
 
   <section id="facts">
-    <h2>Fact sheet</h2>
+    <h2 data-i18n="factsH2">Fact sheet</h2>
     <div class="facts">
       <dl>
-        <div class="row"><dt>Product</dt><dd>klipa</dd></div>
-        <div class="row"><dt>Category</dt><dd>Menu bar clipboard manager &amp; keep-awake utility</dd></div>
-        <div class="row"><dt>Platforms</dt><dd>macOS 11+, Windows 10/11, Linux (x86-64)</dd></div>
-        <div class="row"><dt>Availability</dt><dd>Direct download, Mac App Store, Homebrew, Scoop, winget, AUR</dd></div>
-        <div class="row"><dt>Pricing</dt><dd>7-day free trial, then &euro;1.99 one-time. No subscription.</dd></div>
-        <div class="row"><dt>License</dt><dd>MIT (open source)</dd></div>
-        <div class="row"><dt>Privacy</dt><dd>Local-only. No accounts, no cloud sync, no telemetry.</dd></div>
-        <div class="row"><dt>Binary size</dt><dd>~3.6 MB universal (~6 MB installed)</dd></div>
-        <div class="row"><dt>Memory</dt><dd>~25 MB RAM at rest</dd></div>
-        <div class="row"><dt>Built with</dt><dd>Pure Rust. No Electron, no WebView, no JavaScript runtime.</dd></div>
-        <div class="row"><dt>Website</dt><dd><a href="https://klipa.peterdsp.dev">klipa.peterdsp.dev</a></dd></div>
-        <div class="row"><dt>Source</dt><dd><a href="https://github.com/peterdsp/klipa">github.com/peterdsp/klipa</a></dd></div>
-        <div class="row"><dt>Store</dt><dd><a href="https://ko-fi.com/s/4e1cf2ac40">ko-fi.com/s/4e1cf2ac40</a></dd></div>
-        <div class="row"><dt>Built by</dt><dd>Petros Dhespollari (<a href="https://peterdsp.dev">peterdsp.dev</a>)</dd></div>
+        <div class="row"><dt data-i18n="fProductK">Product</dt><dd>klipa</dd></div>
+        <div class="row"><dt data-i18n="fCategoryK">Category</dt><dd data-i18n="fCategoryV">Menu bar clipboard manager &amp; keep-awake utility</dd></div>
+        <div class="row"><dt data-i18n="fPlatformsK">Platforms</dt><dd>macOS 11+, Windows 10/11, Linux (x86-64)</dd></div>
+        <div class="row"><dt data-i18n="fAvailK">Availability</dt><dd data-i18n="fAvailV">Direct download, Mac App Store, Homebrew, Scoop, winget, AUR</dd></div>
+        <div class="row"><dt data-i18n="fPricingK">Pricing</dt><dd data-i18n-html="fPricingV">7-day free trial, then &euro;1.99 one-time. No subscription.</dd></div>
+        <div class="row"><dt data-i18n="fLicenseK">License</dt><dd data-i18n="fLicenseV">MIT (open source)</dd></div>
+        <div class="row"><dt data-i18n="fPrivacyK">Privacy</dt><dd data-i18n="fPrivacyV">Local-only. No accounts, no cloud sync, no telemetry.</dd></div>
+        <div class="row"><dt data-i18n="fBinaryK">Binary size</dt><dd data-i18n="fBinaryV">~3.6 MB universal (~6 MB installed)</dd></div>
+        <div class="row"><dt data-i18n="fMemoryK">Memory</dt><dd data-i18n="fMemoryV">~25 MB RAM at rest</dd></div>
+        <div class="row"><dt data-i18n="fBuiltWithK">Built with</dt><dd data-i18n="fBuiltWithV">Pure Rust. No Electron, no WebView, no JavaScript runtime.</dd></div>
+        <div class="row"><dt data-i18n="fWebsiteK">Website</dt><dd><a href="https://klipa.peterdsp.dev">klipa.peterdsp.dev</a></dd></div>
+        <div class="row"><dt data-i18n="fSourceK">Source</dt><dd><a href="https://github.com/peterdsp/klipa">github.com/peterdsp/klipa</a></dd></div>
+        <div class="row"><dt data-i18n="fStoreK">Store</dt><dd><a href="https://ko-fi.com/s/4e1cf2ac40">ko-fi.com/s/4e1cf2ac40</a></dd></div>
+        <div class="row"><dt data-i18n="fBuiltByK">Built by</dt><dd>Petros Dhespollari (<a href="https://peterdsp.dev">peterdsp.dev</a>)</dd></div>
       </dl>
     </div>
   </section>
 
   <section id="media">
-    <h2>Media &amp; brand assets</h2>
+    <h2 data-i18n="mediaH2">Media &amp; brand assets</h2>
     <div class="media-grid">
       <div class="asset">
         <a class="thumb" href="assets/press/klipa-01-clipboard-history.png" target="_blank" rel="noopener">
           <img src="assets/press/klipa-01-clipboard-history-1280.png" alt="klipa clipboard history dropdown" loading="lazy" />
         </a>
         <div class="meta">
-          <span><b>Clipboard history</b><small>PNG &middot; 2560&times;1600</small></span>
+          <span><b data-i18n="aClipboard">Clipboard history</b><small>PNG &middot; 2560&times;1600</small></span>
           <a class="dl" href="assets/press/klipa-01-clipboard-history.png" download>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M5 21h14"/></svg>
-            Download
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M5 21h14"/></svg><span data-i18n="dlWord">Download</span>
           </a>
         </div>
       </div>
@@ -217,10 +232,9 @@
           <img src="assets/press/klipa-02-keep-awake-1280.png" alt="klipa keep-awake sessions" loading="lazy" />
         </a>
         <div class="meta">
-          <span><b>Keep-awake sessions</b><small>PNG &middot; 2560&times;1600</small></span>
+          <span><b data-i18n="aKeepAwake">Keep-awake sessions</b><small>PNG &middot; 2560&times;1600</small></span>
           <a class="dl" href="assets/press/klipa-02-keep-awake.png" download>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M5 21h14"/></svg>
-            Download
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M5 21h14"/></svg><span data-i18n="dlWord">Download</span>
           </a>
         </div>
       </div>
@@ -230,10 +244,9 @@
           <img src="assets/press/klipa-03-menu-bar-display-1280.png" alt="klipa menu bar display options" loading="lazy" />
         </a>
         <div class="meta">
-          <span><b>Menu bar display</b><small>PNG &middot; 2560&times;1600</small></span>
+          <span><b data-i18n="aMenuBar">Menu bar display</b><small>PNG &middot; 2560&times;1600</small></span>
           <a class="dl" href="assets/press/klipa-03-menu-bar-display.png" download>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M5 21h14"/></svg>
-            Download
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M5 21h14"/></svg><span data-i18n="dlWord">Download</span>
           </a>
         </div>
       </div>
@@ -243,10 +256,9 @@
           <img src="assets/press/klipa-04-dropdown-size-1280.png" alt="klipa dropdown size settings" loading="lazy" />
         </a>
         <div class="meta">
-          <span><b>Dropdown size</b><small>PNG &middot; 2560&times;1600</small></span>
+          <span><b data-i18n="aDropdown">Dropdown size</b><small>PNG &middot; 2560&times;1600</small></span>
           <a class="dl" href="assets/press/klipa-04-dropdown-size.png" download>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M5 21h14"/></svg>
-            Download
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M5 21h14"/></svg><span data-i18n="dlWord">Download</span>
           </a>
         </div>
       </div>
@@ -256,10 +268,9 @@
           <img src="assets/icon.png" alt="klipa app icon" loading="lazy" />
         </a>
         <div class="meta">
-          <span><b>App icon</b><small>PNG &middot; 512&times;512</small></span>
+          <span><b data-i18n="aIcon">App icon</b><small>PNG &middot; 512&times;512</small></span>
           <a class="dl" href="assets/icon.png" download>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M5 21h14"/></svg>
-            Download
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M5 21h14"/></svg><span data-i18n="dlWord">Download</span>
           </a>
         </div>
       </div>
@@ -269,36 +280,151 @@
           <img src="assets/favicon.png" alt="klipa favicon" loading="lazy" />
         </a>
         <div class="meta">
-          <span><b>Favicon / logomark</b><small>PNG &middot; 256&times;256</small></span>
+          <span><b data-i18n="aFavicon">Favicon / logomark</b><small>PNG &middot; 256&times;256</small></span>
           <a class="dl" href="assets/favicon.png" download>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M5 21h14"/></svg>
-            Download
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M5 21h14"/></svg><span data-i18n="dlWord">Download</span>
           </a>
         </div>
       </div>
     </div>
 
-    <p style="color:var(--muted);font-size:13px;margin-top:14px">Everything above is included in the <a href="assets/press/klipa-press-kit.zip" download>press kit ZIP</a> along with a boilerplate paragraph and a fact sheet.</p>
+    <p style="color:var(--muted);font-size:13px;margin-top:14px" data-i18n-html="mediaNote">Everything above is included in the <a href="assets/press/klipa-press-kit.zip" download>press kit ZIP</a> along with a boilerplate paragraph and a fact sheet.</p>
   </section>
 
   <section id="contact">
-    <h2>Press contact</h2>
+    <h2 data-i18n="contactH2">Press contact</h2>
     <div class="contact">
       <div class="who">
         <b>Petros Dhespollari</b>
-        <p>Creator &amp; developer &middot; always up for collaborations, partnerships, and building things with people who care about the craft.</p>
+        <p data-i18n="contactRole">Creator &amp; developer &middot; always up for collaborations, partnerships, and building things with people who care about the craft.</p>
       </div>
       <a class="btn primary" href="mailto:info@peterdsp.dev">info@peterdsp.dev</a>
     </div>
   </section>
 
   <footer>
-    <p>klipa &middot; MIT licensed &middot;
+    <p data-i18n-html="pFooter">klipa &middot; MIT licensed &middot;
       <a href="index.html">Home</a> &middot;
       <a href="privacy.html">Privacy</a> &middot;
       <a href="https://github.com/peterdsp/klipa">GitHub</a>
     </p>
   </footer>
 </div>
+
+<script>
+  (function () {
+    var I18N = {
+      en: {
+        pTitle: "klipa - Press Kit",
+        eyebrow: "Press · Media kit",
+        h1: "klipa press kit",
+        lede: "Everything you need to write about, review, or cover klipa: a boilerplate paragraph, a one-page fact sheet, product screenshots at native resolution, brand assets and press contact.",
+        btnDownload: "Download press kit (ZIP, 1.7 MB)",
+        btnEmail: "Email press contact",
+        tocAbout: "About", tocFacts: "Fact sheet", tocMedia: "Media", tocContact: "Contact",
+        aboutH2: "About klipa",
+        boiler1: "klipa is a native menu bar clipboard manager for macOS, Windows and Linux. Every copy is kept as one entry in a native menu bar dropdown - text and images alike - and clicking any entry copies it back so you can paste it. klipa also offers keep-awake sessions to stop your machine from sleeping, and can optionally show the date, the current temperature at your location, or both next to its status bar icon.",
+        boiler2: `klipa is about 3.6 MB (roughly 6 MB installed) and uses about 25 MB of RAM. It is written in pure Rust with no Electron, no WebView and no JavaScript runtime. Your clipboard history stays on your device: klipa has no accounts, no cloud sync and no telemetry. It is MIT licensed, with a 7-day free trial and a one-time &euro;1.99 unlock, and is also available on the Mac App Store, Homebrew, Scoop, winget and AUR.`,
+        factsH2: "Fact sheet",
+        fProductK: "Product",
+        fCategoryK: "Category", fCategoryV: "Menu bar clipboard manager & keep-awake utility",
+        fPlatformsK: "Platforms",
+        fAvailK: "Availability", fAvailV: "Direct download, Mac App Store, Homebrew, Scoop, winget, AUR",
+        fPricingK: "Pricing", fPricingV: `7-day free trial, then &euro;1.99 one-time. No subscription.`,
+        fLicenseK: "License", fLicenseV: "MIT (open source)",
+        fPrivacyK: "Privacy", fPrivacyV: "Local-only. No accounts, no cloud sync, no telemetry.",
+        fBinaryK: "Binary size", fBinaryV: "~3.6 MB universal (~6 MB installed)",
+        fMemoryK: "Memory", fMemoryV: "~25 MB RAM at rest",
+        fBuiltWithK: "Built with", fBuiltWithV: "Pure Rust. No Electron, no WebView, no JavaScript runtime.",
+        fWebsiteK: "Website", fSourceK: "Source", fStoreK: "Store", fBuiltByK: "Built by",
+        mediaH2: "Media & brand assets",
+        aClipboard: "Clipboard history", aKeepAwake: "Keep-awake sessions", aMenuBar: "Menu bar display",
+        aDropdown: "Dropdown size", aIcon: "App icon", aFavicon: "Favicon / logomark",
+        dlWord: "Download",
+        mediaNote: `Everything above is included in the <a href="assets/press/klipa-press-kit.zip" download>press kit ZIP</a> along with a boilerplate paragraph and a fact sheet.`,
+        contactH2: "Press contact",
+        contactRole: "Creator & developer · always up for collaborations, partnerships, and building things with people who care about the craft.",
+        pFooter: `klipa &middot; MIT licensed &middot; <a href="index.html">Home</a> &middot; <a href="privacy.html">Privacy</a> &middot; <a href="https://github.com/peterdsp/klipa">GitHub</a>`,
+      },
+      el: {
+        pTitle: "klipa - Υλικό Τύπου",
+        eyebrow: "Τύπος · Media kit",
+        h1: "Υλικό Τύπου klipa",
+        lede: "Ό,τι χρειάζεσαι για να γράψεις, να κρίνεις ή να καλύψεις το klipa: μια παράγραφος boilerplate, ένα δελτίο στοιχείων μίας σελίδας, στιγμιότυπα προϊόντος σε εγγενή ανάλυση, στοιχεία επωνυμίας και επαφή Τύπου.",
+        btnDownload: "Λήψη υλικού Τύπου (ZIP, 1.7 MB)",
+        btnEmail: "Email επαφής Τύπου",
+        tocAbout: "Σχετικά", tocFacts: "Δελτίο στοιχείων", tocMedia: "Media", tocContact: "Επικοινωνία",
+        aboutH2: "Σχετικά με το klipa",
+        boiler1: "Το klipa είναι ένας εγγενής διαχειριστής προχείρου στη γραμμή μενού για macOS, Windows και Linux. Κάθε αντιγραφή κρατείται ως μία καταχώρηση σε ένα εγγενές μενού της γραμμής μενού - κείμενο και εικόνες το ίδιο - και κάνοντας κλικ σε οποιαδήποτε καταχώρηση την αντιγράφει πάλι ώστε να μπορείς να την επικολλήσεις. Το klipa προσφέρει επίσης συνεδρίες keep-awake για να εμποδίζει τη συσκευή σου να κοιμηθεί, και μπορεί προαιρετικά να δείχνει την ημερομηνία, την τρέχουσα θερμοκρασία στην τοποθεσία σου, ή και τα δύο δίπλα στο εικονίδιο της γραμμής κατάστασης.",
+        boiler2: `Το klipa είναι περίπου 3.6 MB (περίπου 6 MB εγκατεστημένο) και χρησιμοποιεί περίπου 25 MB RAM. Είναι γραμμένο σε καθαρή Rust χωρίς Electron, χωρίς WebView και χωρίς JavaScript runtime. Το ιστορικό του προχείρου σου παραμένει στη συσκευή σου: το klipa δεν έχει λογαριασμούς, ούτε συγχρονισμό στο cloud, ούτε τηλεμετρία. Έχει άδεια MIT, με δωρεάν δοκιμή 7 ημερών και εφάπαξ ξεκλείδωμα &euro;1.99, και είναι επίσης διαθέσιμο στο Mac App Store, Homebrew, Scoop, winget και AUR.`,
+        factsH2: "Δελτίο στοιχείων",
+        fProductK: "Προϊόν",
+        fCategoryK: "Κατηγορία", fCategoryV: "Διαχειριστής προχείρου στη γραμμή μενού & εργαλείο keep-awake",
+        fPlatformsK: "Πλατφόρμες",
+        fAvailK: "Διαθεσιμότητα", fAvailV: "Άμεση λήψη, Mac App Store, Homebrew, Scoop, winget, AUR",
+        fPricingK: "Τιμή", fPricingV: `Δωρεάν δοκιμή 7 ημερών, μετά &euro;1.99 μία φορά. Χωρίς συνδρομή.`,
+        fLicenseK: "Άδεια", fLicenseV: "MIT (ανοιχτού κώδικα)",
+        fPrivacyK: "Απόρρητο", fPrivacyV: "Μόνο τοπικά. Χωρίς λογαριασμούς, χωρίς συγχρονισμό στο cloud, χωρίς τηλεμετρία.",
+        fBinaryK: "Μέγεθος binary", fBinaryV: "~3.6 MB universal (~6 MB εγκατεστημένο)",
+        fMemoryK: "Μνήμη", fMemoryV: "~25 MB RAM σε ηρεμία",
+        fBuiltWithK: "Φτιαγμένο με", fBuiltWithV: "Καθαρή Rust. Χωρίς Electron, χωρίς WebView, χωρίς JavaScript runtime.",
+        fWebsiteK: "Ιστότοπος", fSourceK: "Πηγαίος κώδικας", fStoreK: "Κατάστημα", fBuiltByK: "Φτιαγμένο από",
+        mediaH2: "Media & στοιχεία επωνυμίας",
+        aClipboard: "Ιστορικό προχείρου", aKeepAwake: "Συνεδρίες keep-awake", aMenuBar: "Εμφάνιση γραμμής μενού",
+        aDropdown: "Μέγεθος μενού", aIcon: "Εικονίδιο εφαρμογής", aFavicon: "Favicon / λογότυπο",
+        dlWord: "Λήψη",
+        mediaNote: `Όλα τα παραπάνω περιλαμβάνονται στο <a href="assets/press/klipa-press-kit.zip" download>ZIP υλικού Τύπου</a> μαζί με μια παράγραφο boilerplate και ένα δελτίο στοιχείων.`,
+        contactH2: "Επαφή Τύπου",
+        contactRole: "Δημιουργός & προγραμματιστής · πάντα ανοιχτός σε συνεργασίες, συμπράξεις και στο να φτιάχνει πράγματα με ανθρώπους που νοιάζονται για την τέχνη τους.",
+        pFooter: `klipa &middot; Άδεια MIT &middot; <a href="index.html">Αρχική</a> &middot; <a href="privacy.html">Απόρρητο</a> &middot; <a href="https://github.com/peterdsp/klipa">GitHub</a>`,
+      },
+      sq: {
+        pTitle: "klipa - Materialet për shtypin",
+        eyebrow: "Shtypi · Media kit",
+        h1: "Materialet për shtypin të klipa",
+        lede: "Gjithçka që të duhet për të shkruar, recensuar ose mbuluar klipa: një paragraf boilerplate, një fletë faktesh njëfaqëshe, pamje ekrani të produktit në rezolucion vendas, materiale marke dhe kontakti për shtypin.",
+        btnDownload: "Shkarko materialet (ZIP, 1.7 MB)",
+        btnEmail: "Email për kontaktin e shtypit",
+        tocAbout: "Rreth", tocFacts: "Fleta e fakteve", tocMedia: "Media", tocContact: "Kontakti",
+        aboutH2: "Rreth klipa",
+        boiler1: "klipa është një menaxher vendas i clipboard-it në shiritin e menysë për macOS, Windows dhe Linux. Çdo kopjim mbahet si një hyrje në një menu vendase të shiritit të menysë - tekst dhe imazhe njësoj - dhe klikimi i çdo hyrjeje e kopjon përsëri që të mund ta ngjitësh. klipa ofron gjithashtu sesione keep-awake për të ndaluar makinën tënde nga gjumi, dhe mund opsionalisht të shfaqë datën, temperaturën aktuale në vendndodhjen tënde, ose të dyja pranë ikonës së shiritit të statusit.",
+        boiler2: `klipa është rreth 3.6 MB (afërsisht 6 MB i instaluar) dhe përdor rreth 25 MB RAM. Është shkruar në Rust të pastër pa Electron, pa WebView dhe pa JavaScript runtime. Historiku i clipboard-it tënd qëndron në pajisjen tënde: klipa nuk ka llogari, as sinkronizim në cloud, as telemetri. Ka licencë MIT, me një provë falas 7-ditore dhe një shkyçje të vetme prej &euro;1.99, dhe është gjithashtu i disponueshëm në Mac App Store, Homebrew, Scoop, winget dhe AUR.`,
+        factsH2: "Fleta e fakteve",
+        fProductK: "Produkti",
+        fCategoryK: "Kategoria", fCategoryV: "Menaxher clipboard-i në shiritin e menysë & mjet keep-awake",
+        fPlatformsK: "Platformat",
+        fAvailK: "Disponueshmëria", fAvailV: "Shkarkim i drejtpërdrejtë, Mac App Store, Homebrew, Scoop, winget, AUR",
+        fPricingK: "Çmimi", fPricingV: `Provë falas 7-ditore, pastaj &euro;1.99 një herë. Pa abonim.`,
+        fLicenseK: "Licenca", fLicenseV: "MIT (kod i hapur)",
+        fPrivacyK: "Privatësia", fPrivacyV: "Vetëm lokal. Pa llogari, pa sinkronizim në cloud, pa telemetri.",
+        fBinaryK: "Madhësia e binarit", fBinaryV: "~3.6 MB universal (~6 MB i instaluar)",
+        fMemoryK: "Memoria", fMemoryV: "~25 MB RAM në pushim",
+        fBuiltWithK: "Ndërtuar me", fBuiltWithV: "Rust i pastër. Pa Electron, pa WebView, pa JavaScript runtime.",
+        fWebsiteK: "Faqja", fSourceK: "Kodi burimor", fStoreK: "Dyqani", fBuiltByK: "Ndërtuar nga",
+        mediaH2: "Media & materiale marke",
+        aClipboard: "Historiku i clipboard-it", aKeepAwake: "Sesione keep-awake", aMenuBar: "Shfaqja në shiritin e menysë",
+        aDropdown: "Madhësia e menusë", aIcon: "Ikona e aplikacionit", aFavicon: "Favicon / logo",
+        dlWord: "Shkarko",
+        mediaNote: `Gjithçka më sipër përfshihet në <a href="assets/press/klipa-press-kit.zip" download>ZIP-in e materialeve</a> së bashku me një paragraf boilerplate dhe një fletë faktesh.`,
+        contactH2: "Kontakti për shtypin",
+        contactRole: "Krijues & zhvillues · gjithmonë i gatshëm për bashkëpunime, partneritete dhe për të ndërtuar gjëra me njerëz që kujdesen për mjeshtërinë.",
+        pFooter: `klipa &middot; Licencë MIT &middot; <a href="index.html">Kryefaqja</a> &middot; <a href="privacy.html">Privatësia</a> &middot; <a href="https://github.com/peterdsp/klipa">GitHub</a>`,
+      },
+    };
+    function detect(){ try{var s=localStorage.getItem("klipa_site_lang"); if(s&&I18N[s])return s;}catch(e){} var n=(navigator.language||"en").toLowerCase(); if(n.indexOf("el")===0)return "el"; if(n.indexOf("sq")===0)return "sq"; return "en"; }
+    function apply(lang){ var d=I18N[lang]||I18N.en;
+      document.querySelectorAll("[data-i18n]").forEach(function(el){var v=d[el.getAttribute("data-i18n")]; if(v!=null)el.textContent=v;});
+      document.querySelectorAll("[data-i18n-html]").forEach(function(el){var v=d[el.getAttribute("data-i18n-html")]; if(v!=null)el.innerHTML=v;});
+      document.documentElement.lang=lang; if(d.pTitle)document.title=d.pTitle;
+      document.querySelectorAll(".lang-btn").forEach(function(b){var on=b.getAttribute("data-lang")===lang; b.classList.toggle("active",on); b.setAttribute("aria-pressed",String(on));});
+      try{localStorage.setItem("klipa_site_lang",lang);}catch(e){}
+    }
+    function reduce(){return window.matchMedia&&window.matchMedia("(prefers-reduced-motion: reduce)").matches;}
+    function sw(lang){ if(!reduce()&&document.startViewTransition){document.startViewTransition(function(){apply(lang);});} else {apply(lang);} }
+    document.querySelectorAll(".lang-btn").forEach(function(b){b.addEventListener("click",function(){sw(b.getAttribute("data-lang"));});});
+    apply(detect());
+    try{ if(HTMLScriptElement.supports&&HTMLScriptElement.supports("speculationrules")){var sr=document.createElement("script");sr.type="speculationrules";sr.textContent='{"prefetch":[{"source":"document","where":{"href_matches":"/*"},"eagerness":"moderate"}]}';document.head.appendChild(sr);} }catch(e){}
+  })();
+</script>
 </body>
 </html>
