@@ -42,56 +42,72 @@
     border-radius:6px;padding:1px 6px;color:#eceef2;
   }
   footer{margin-top:60px;text-align:center;color:var(--muted);font-size:13px}
+
+  @view-transition{navigation:auto}
+  @media (prefers-reduced-motion: no-preference){
+    ::view-transition-old(root),::view-transition-new(root){animation-duration:320ms;animation-timing-function:ease}
+  }
+  .lang-switch{position:fixed;top:16px;right:16px;z-index:20;display:inline-flex;gap:2px;padding:3px;border:1px solid var(--stroke);border-radius:999px;background:rgba(20,22,27,.72);backdrop-filter:blur(12px)}
+  .lang-btn{all:unset;cursor:pointer;font-size:12px;font-weight:600;color:var(--muted);padding:4px 9px;border-radius:999px;line-height:1}
+  .lang-btn:hover{color:var(--text)}
+  .lang-btn.active{background:var(--accent2);color:#fff}
 </style>
 </head>
 <body>
+
+<div class="lang-switch" role="group" aria-label="Language">
+  <button class="lang-btn" type="button" data-lang="en" title="English">EN</button>
+  <button class="lang-btn" type="button" data-lang="el" title="Ελληνικά">ΕΛ</button>
+  <button class="lang-btn" type="button" data-lang="sq" title="Shqip">SQ</button>
+</div>
+
 <div class="wrap">
   <header>
     <img class="logo" src="assets/icon.png" alt="klipa" />
-    <h1>Privacy Policy</h1>
-    <p class="updated">Last updated: 1 July 2026</p>
+    <h1 data-i18n="ppH1">Privacy Policy</h1>
+    <p class="updated" data-i18n="ppUpdated">Last updated: 1 July 2026</p>
   </header>
 
-  <p>klipa is a clipboard manager and keep-awake utility that runs on your
+  <p data-i18n="ppIntro">klipa is a clipboard manager and keep-awake utility that runs on your
   device. This privacy policy explains what information the app handles
   and what it does not do. It is short because there is very little to
   say.</p>
 
   <div class="card">
-    <p style="margin-bottom:0"><strong>Short version.</strong>
+    <p style="margin-bottom:0" data-i18n-html="ppShort"><strong>Short version.</strong>
     klipa collects no personal data. Your clipboard history stays on
     your device, in your own user data folder. Nothing is uploaded,
     logged, synced, or sold. klipa has no servers, no analytics, no
     ads, no accounts, and no tracking.</p>
   </div>
 
-  <h2>Data stored on your device</h2>
-  <p>klipa keeps a local history of items you have copied to the
+  <h2 data-i18n="ppH2Stored">Data stored on your device</h2>
+  <p data-i18n="ppStored">klipa keeps a local history of items you have copied to the
   clipboard - text and images - so you can paste them back later. This
   history is written to a single JSON file, plus per-image PNG files
   for image entries, in your operating system's application data
   directory:</p>
   <ul>
-    <li>macOS: <span class="kbd">~/Library/Application&nbsp;Support/dev.peterdsp.klipa/</span></li>
-    <li>Windows: <span class="kbd">%APPDATA%\dev.peterdsp.klipa\</span></li>
-    <li>Linux: <span class="kbd">~/.local/share/dev.peterdsp.klipa/</span></li>
+    <li data-i18n-html="ppLiMac">macOS: <span class="kbd">~/Library/Application&nbsp;Support/dev.peterdsp.klipa/</span></li>
+    <li data-i18n-html="ppLiWin">Windows: <span class="kbd">%APPDATA%\dev.peterdsp.klipa\</span></li>
+    <li data-i18n-html="ppLiLinux">Linux: <span class="kbd">~/.local/share/dev.peterdsp.klipa/</span></li>
   </ul>
-  <p>You can inspect, back up, or delete this folder at any time. The
+  <p data-i18n-html="ppStored2">You can inspect, back up, or delete this folder at any time. The
   in-app <em>Clear history</em> action empties it for you.</p>
 
-  <h2>What klipa never does</h2>
+  <h2 data-i18n="ppH2Never">What klipa never does</h2>
   <ul>
-    <li>klipa never uploads your clipboard, or any part of it, to any
+    <li data-i18n="ppNever1">klipa never uploads your clipboard, or any part of it, to any
     server operated by us or anyone else.</li>
-    <li>klipa never contains any analytics, telemetry, crash reporting,
+    <li data-i18n="ppNever2">klipa never contains any analytics, telemetry, crash reporting,
     or tracking SDKs.</li>
-    <li>klipa never shows ads.</li>
-    <li>klipa never asks you to create an account.</li>
-    <li>klipa never syncs between devices.</li>
+    <li data-i18n="ppNever3">klipa never shows ads.</li>
+    <li data-i18n="ppNever4">klipa never asks you to create an account.</li>
+    <li data-i18n="ppNever5">klipa never syncs between devices.</li>
   </ul>
 
-  <h2>Optional network requests</h2>
-  <p>klipa is local-only by default. If you explicitly opt in to one of
+  <h2 data-i18n="ppH2Net">Optional network requests</h2>
+  <p data-i18n-html="ppNet1">klipa is local-only by default. If you explicitly opt in to one of
   the optional menu bar modes that show a temperature, the app makes
   two kinds of anonymous, aggregate HTTP requests: one to
   <a href="https://ip-api.com">ip-api.com</a> to look up an approximate
@@ -101,13 +117,13 @@
   minutes). These requests are made only while a temperature mode is
   enabled and are not sent to us. The default menu bar mode makes no
   network requests at all.</p>
-  <p>Outside of the Mac App Store, klipa also checks the GitHub
+  <p data-i18n="ppNet2">Outside of the Mac App Store, klipa also checks the GitHub
   Releases API at most once a day to see if a newer version of klipa is
   available. This lets it show an "Update available" item in the menu.
   No information about you is sent in that request.</p>
 
-  <h2>License activation (non-App-Store builds only)</h2>
-  <p>The direct-download builds of klipa (macOS <span class="kbd">.pkg</span>,
+  <h2 data-i18n="ppH2Lic">License activation (non-App-Store builds only)</h2>
+  <p data-i18n-html="ppLic">The direct-download builds of klipa (macOS <span class="kbd">.pkg</span>,
   Windows installer, Linux packages) include a paid unlock after a
   7-day free trial. If you choose to activate a license key, klipa
   sends the key you paste to <a href="https://gumroad.com">gumroad.com</a>
@@ -115,31 +131,150 @@
   locally so no further requests are needed to keep the app unlocked.
   The Mac App Store build does not include this feature at all.</p>
 
-  <h2>Payment</h2>
-  <p>On the Mac App Store, payment is handled entirely by Apple; klipa
+  <h2 data-i18n="ppH2Pay">Payment</h2>
+  <p data-i18n="ppPay">On the Mac App Store, payment is handled entirely by Apple; klipa
   never sees your payment details. For the direct-download builds,
   payment is handled entirely by Gumroad, our merchant of record;
   klipa never sees your payment details either.</p>
 
-  <h2>Children</h2>
-  <p>klipa is a general-purpose utility and does not knowingly collect
+  <h2 data-i18n="ppH2Kids">Children</h2>
+  <p data-i18n="ppKids">klipa is a general-purpose utility and does not knowingly collect
   any information from anyone, of any age.</p>
 
-  <h2>Changes to this policy</h2>
-  <p>If this policy ever changes in any material way, the update will
+  <h2 data-i18n="ppH2Changes">Changes to this policy</h2>
+  <p data-i18n-html="ppChanges">If this policy ever changes in any material way, the update will
   be shown here with a new "Last updated" date. The source of this page
   lives in the <a href="https://github.com/peterdsp/klipa">klipa
   GitHub repository</a>, so every change is visible in the commit
   history.</p>
 
-  <h2>Contact</h2>
-  <p>Questions or concerns about this policy or about how klipa
+  <h2 data-i18n="ppH2Contact">Contact</h2>
+  <p data-i18n-html="ppContact">Questions or concerns about this policy or about how klipa
   handles your data: <a href="mailto:info@peterdsp.dev">info@peterdsp.dev</a>.</p>
 
-  <footer>
+  <footer data-i18n-html="ppFooter">
     &lt; <a href="index.html">back to klipa</a> &nbsp;·&nbsp;
     <a href="https://github.com/peterdsp/klipa">source on GitHub</a>
   </footer>
 </div>
+
+<script>
+  (function () {
+    var I18N = {
+      en: {
+        ppTitle: "klipa - Privacy Policy",
+        ppH1: "Privacy Policy",
+        ppUpdated: "Last updated: 1 July 2026",
+        ppIntro: "klipa is a clipboard manager and keep-awake utility that runs on your device. This privacy policy explains what information the app handles and what it does not do. It is short because there is very little to say.",
+        ppShort: `<strong>Short version.</strong> klipa collects no personal data. Your clipboard history stays on your device, in your own user data folder. Nothing is uploaded, logged, synced, or sold. klipa has no servers, no analytics, no ads, no accounts, and no tracking.`,
+        ppH2Stored: "Data stored on your device",
+        ppStored: "klipa keeps a local history of items you have copied to the clipboard - text and images - so you can paste them back later. This history is written to a single JSON file, plus per-image PNG files for image entries, in your operating system's application data directory:",
+        ppLiMac: `macOS: <span class="kbd">~/Library/Application&nbsp;Support/dev.peterdsp.klipa/</span>`,
+        ppLiWin: `Windows: <span class="kbd">%APPDATA%\\dev.peterdsp.klipa\\</span>`,
+        ppLiLinux: `Linux: <span class="kbd">~/.local/share/dev.peterdsp.klipa/</span>`,
+        ppStored2: `You can inspect, back up, or delete this folder at any time. The in-app <em>Clear history</em> action empties it for you.`,
+        ppH2Never: "What klipa never does",
+        ppNever1: "klipa never uploads your clipboard, or any part of it, to any server operated by us or anyone else.",
+        ppNever2: "klipa never contains any analytics, telemetry, crash reporting, or tracking SDKs.",
+        ppNever3: "klipa never shows ads.",
+        ppNever4: "klipa never asks you to create an account.",
+        ppNever5: "klipa never syncs between devices.",
+        ppH2Net: "Optional network requests",
+        ppNet1: `klipa is local-only by default. If you explicitly opt in to one of the optional menu bar modes that show a temperature, the app makes two kinds of anonymous, aggregate HTTP requests: one to <a href="https://ip-api.com">ip-api.com</a> to look up an approximate latitude and longitude from your IP address (cached for 24 hours), and one to <a href="https://open-meteo.com">open-meteo.com</a> to fetch the current temperature at those coordinates (cached for 10 minutes). These requests are made only while a temperature mode is enabled and are not sent to us. The default menu bar mode makes no network requests at all.`,
+        ppNet2: `Outside of the Mac App Store, klipa also checks the GitHub Releases API at most once a day to see if a newer version of klipa is available. This lets it show an "Update available" item in the menu. No information about you is sent in that request.`,
+        ppH2Lic: "License activation (non-App-Store builds only)",
+        ppLic: `The direct-download builds of klipa (macOS <span class="kbd">.pkg</span>, Windows installer, Linux packages) include a paid unlock after a 7-day free trial. If you choose to activate a license key, klipa sends the key you paste to <a href="https://gumroad.com">gumroad.com</a> once, over HTTPS, to verify that it is valid. The result is cached locally so no further requests are needed to keep the app unlocked. The Mac App Store build does not include this feature at all.`,
+        ppH2Pay: "Payment",
+        ppPay: "On the Mac App Store, payment is handled entirely by Apple; klipa never sees your payment details. For the direct-download builds, payment is handled entirely by Gumroad, our merchant of record; klipa never sees your payment details either.",
+        ppH2Kids: "Children",
+        ppKids: "klipa is a general-purpose utility and does not knowingly collect any information from anyone, of any age.",
+        ppH2Changes: "Changes to this policy",
+        ppChanges: `If this policy ever changes in any material way, the update will be shown here with a new "Last updated" date. The source of this page lives in the <a href="https://github.com/peterdsp/klipa">klipa GitHub repository</a>, so every change is visible in the commit history.`,
+        ppH2Contact: "Contact",
+        ppContact: `Questions or concerns about this policy or about how klipa handles your data: <a href="mailto:info@peterdsp.dev">info@peterdsp.dev</a>.`,
+        ppFooter: `&lt; <a href="index.html">back to klipa</a> &nbsp;·&nbsp; <a href="https://github.com/peterdsp/klipa">source on GitHub</a>`,
+      },
+      el: {
+        ppTitle: "klipa - Πολιτική Απορρήτου",
+        ppH1: "Πολιτική Απορρήτου",
+        ppUpdated: "Τελευταία ενημέρωση: 1 Ιουλίου 2026",
+        ppIntro: "Το klipa είναι ένας διαχειριστής προχείρου και εργαλείο keep-awake που τρέχει στη συσκευή σου. Αυτή η πολιτική απορρήτου εξηγεί ποιες πληροφορίες χειρίζεται η εφαρμογή και τι δεν κάνει. Είναι σύντομη επειδή υπάρχουν πολύ λίγα να πούμε.",
+        ppShort: `<strong>Σύντομη εκδοχή.</strong> Το klipa δεν συλλέγει προσωπικά δεδομένα. Το ιστορικό του προχείρου σου παραμένει στη συσκευή σου, στον δικό σου φάκελο δεδομένων χρήστη. Τίποτα δεν ανεβαίνει, καταγράφεται, συγχρονίζεται ή πωλείται. Το klipa δεν έχει διακομιστές, analytics, διαφημίσεις, λογαριασμούς ή παρακολούθηση.`,
+        ppH2Stored: "Δεδομένα που αποθηκεύονται στη συσκευή σου",
+        ppStored: "Το klipa κρατά ένα τοπικό ιστορικό των στοιχείων που έχεις αντιγράψει στο πρόχειρο - κείμενο και εικόνες - ώστε να μπορείς να τα επικολλήσεις αργότερα. Αυτό το ιστορικό γράφεται σε ένα μόνο αρχείο JSON, συν αρχεία PNG ανά εικόνα για τις καταχωρήσεις εικόνων, στον κατάλογο δεδομένων εφαρμογών του λειτουργικού σου συστήματος:",
+        ppLiMac: `macOS: <span class="kbd">~/Library/Application&nbsp;Support/dev.peterdsp.klipa/</span>`,
+        ppLiWin: `Windows: <span class="kbd">%APPDATA%\\dev.peterdsp.klipa\\</span>`,
+        ppLiLinux: `Linux: <span class="kbd">~/.local/share/dev.peterdsp.klipa/</span>`,
+        ppStored2: `Μπορείς να επιθεωρήσεις, να δημιουργήσεις αντίγραφο ασφαλείας ή να διαγράψεις αυτόν τον φάκελο ανά πάσα στιγμή. Η ενέργεια <em>Clear history</em> μέσα στην εφαρμογή τον αδειάζει για σένα.`,
+        ppH2Never: "Τι δεν κάνει ποτέ το klipa",
+        ppNever1: "Το klipa δεν ανεβάζει ποτέ το πρόχειρό σου, ή οποιοδήποτε μέρος του, σε κανέναν διακομιστή που λειτουργούμε εμείς ή οποιοσδήποτε άλλος.",
+        ppNever2: "Το klipa δεν περιέχει ποτέ analytics, τηλεμετρία, αναφορά σφαλμάτων ή SDK παρακολούθησης.",
+        ppNever3: "Το klipa δεν εμφανίζει ποτέ διαφημίσεις.",
+        ppNever4: "Το klipa δεν σου ζητά ποτέ να δημιουργήσεις λογαριασμό.",
+        ppNever5: "Το klipa δεν συγχρονίζει ποτέ μεταξύ συσκευών.",
+        ppH2Net: "Προαιρετικά αιτήματα δικτύου",
+        ppNet1: `Το klipa είναι μόνο τοπικό από προεπιλογή. Αν επιλέξεις ρητά μία από τις προαιρετικές λειτουργίες της γραμμής μενού που δείχνουν θερμοκρασία, η εφαρμογή κάνει δύο είδη ανώνυμων, συγκεντρωτικών αιτημάτων HTTP: ένα στο <a href="https://ip-api.com">ip-api.com</a> για να βρει κατά προσέγγιση γεωγραφικό πλάτος και μήκος από τη διεύθυνση IP σου (αποθηκευμένο για 24 ώρες), και ένα στο <a href="https://open-meteo.com">open-meteo.com</a> για να ανακτήσει την τρέχουσα θερμοκρασία σε αυτές τις συντεταγμένες (αποθηκευμένο για 10 λεπτά). Αυτά τα αιτήματα γίνονται μόνο όταν είναι ενεργή μια λειτουργία θερμοκρασίας και δεν στέλνονται σε εμάς. Η προεπιλεγμένη λειτουργία της γραμμής μενού δεν κάνει κανένα αίτημα δικτύου.`,
+        ppNet2: `Εκτός του Mac App Store, το klipa ελέγχει επίσης το API των GitHub Releases το πολύ μία φορά την ημέρα για να δει αν υπάρχει νεότερη έκδοση του klipa. Αυτό του επιτρέπει να δείξει ένα στοιχείο "Update available" στο μενού. Καμία πληροφορία για σένα δεν στέλνεται σε αυτό το αίτημα.`,
+        ppH2Lic: "Ενεργοποίηση άδειας (μόνο εκδόσεις εκτός App Store)",
+        ppLic: `Οι εκδόσεις άμεσης λήψης του klipa (macOS <span class="kbd">.pkg</span>, εγκαταστάτης Windows, πακέτα Linux) περιλαμβάνουν ξεκλείδωμα επί πληρωμή μετά από μια δωρεάν δοκιμή 7 ημερών. Αν επιλέξεις να ενεργοποιήσεις ένα κλειδί άδειας, το klipa στέλνει το κλειδί που επικολλάς στο <a href="https://gumroad.com">gumroad.com</a> μία φορά, μέσω HTTPS, για να επαληθεύσει ότι είναι έγκυρο. Το αποτέλεσμα αποθηκεύεται τοπικά ώστε να μη χρειάζονται άλλα αιτήματα για να παραμείνει ξεκλειδωμένη η εφαρμογή. Η έκδοση του Mac App Store δεν περιλαμβάνει καθόλου αυτή τη λειτουργία.`,
+        ppH2Pay: "Πληρωμή",
+        ppPay: "Στο Mac App Store, η πληρωμή διεκπεραιώνεται εξ ολοκλήρου από την Apple· το klipa δεν βλέπει ποτέ τα στοιχεία πληρωμής σου. Για τις εκδόσεις άμεσης λήψης, η πληρωμή διεκπεραιώνεται εξ ολοκλήρου από το Gumroad, τον έμπορο καταγραφής μας· το klipa δεν βλέπει ποτέ τα στοιχεία πληρωμής σου ούτε εκεί.",
+        ppH2Kids: "Παιδιά",
+        ppKids: "Το klipa είναι ένα εργαλείο γενικής χρήσης και δεν συλλέγει εν γνώσει του καμία πληροφορία από κανέναν, οποιασδήποτε ηλικίας.",
+        ppH2Changes: "Αλλαγές σε αυτή την πολιτική",
+        ppChanges: `Αν αυτή η πολιτική αλλάξει ποτέ με οποιονδήποτε ουσιώδη τρόπο, η ενημέρωση θα εμφανιστεί εδώ με νέα ημερομηνία "Τελευταία ενημέρωση". Ο κώδικας αυτής της σελίδας βρίσκεται στο <a href="https://github.com/peterdsp/klipa">αποθετήριο GitHub του klipa</a>, οπότε κάθε αλλαγή είναι ορατή στο ιστορικό των commit.`,
+        ppH2Contact: "Επικοινωνία",
+        ppContact: `Ερωτήσεις ή ανησυχίες για αυτή την πολιτική ή για το πώς το klipa χειρίζεται τα δεδομένα σου: <a href="mailto:info@peterdsp.dev">info@peterdsp.dev</a>.`,
+        ppFooter: `&lt; <a href="index.html">πίσω στο klipa</a> &nbsp;·&nbsp; <a href="https://github.com/peterdsp/klipa">κώδικας στο GitHub</a>`,
+      },
+      sq: {
+        ppTitle: "klipa - Politika e Privatësisë",
+        ppH1: "Politika e Privatësisë",
+        ppUpdated: "Përditësuar së fundmi: 1 korrik 2026",
+        ppIntro: "klipa është një menaxher clipboard-i dhe një mjet keep-awake që funksionon në pajisjen tënde. Kjo politikë privatësie shpjegon çfarë informacioni trajton aplikacioni dhe çfarë nuk bën. Është e shkurtër sepse ka shumë pak për të thënë.",
+        ppShort: `<strong>Versioni i shkurtër.</strong> klipa nuk mbledh të dhëna personale. Historiku i clipboard-it tënd qëndron në pajisjen tënde, në dosjen tënde të të dhënave të përdoruesit. Asgjë nuk ngarkohet, regjistrohet, sinkronizohet ose shitet. klipa nuk ka servera, analitikë, reklama, llogari ose gjurmim.`,
+        ppH2Stored: "Të dhënat e ruajtura në pajisjen tënde",
+        ppStored: "klipa mban një historik lokal të gjërave që ke kopjuar në clipboard - tekst dhe imazhe - që të mund t'i ngjitësh më vonë. Ky historik shkruhet në një skedar të vetëm JSON, plus skedarë PNG për çdo imazh për hyrjet me imazhe, në direktorinë e të dhënave të aplikacioneve të sistemit tënd operativ:",
+        ppLiMac: `macOS: <span class="kbd">~/Library/Application&nbsp;Support/dev.peterdsp.klipa/</span>`,
+        ppLiWin: `Windows: <span class="kbd">%APPDATA%\\dev.peterdsp.klipa\\</span>`,
+        ppLiLinux: `Linux: <span class="kbd">~/.local/share/dev.peterdsp.klipa/</span>`,
+        ppStored2: `Mund ta inspektosh, ta ruash ose ta fshish këtë dosje në çdo kohë. Veprimi <em>Clear history</em> brenda aplikacionit e zbraz atë për ty.`,
+        ppH2Never: "Çfarë nuk bën kurrë klipa",
+        ppNever1: "klipa nuk e ngarkon kurrë clipboard-in tënd, ose ndonjë pjesë të tij, në ndonjë server të operuar nga ne ose kushdo tjetër.",
+        ppNever2: "klipa nuk përmban kurrë analitikë, telemetri, raportim përplasjesh ose SDK gjurmimi.",
+        ppNever3: "klipa nuk shfaq kurrë reklama.",
+        ppNever4: "klipa nuk të kërkon kurrë të krijosh një llogari.",
+        ppNever5: "klipa nuk sinkronizon kurrë midis pajisjeve.",
+        ppH2Net: "Kërkesa opsionale rrjeti",
+        ppNet1: `klipa është vetëm lokal si parazgjedhje. Nëse zgjedh shprehimisht një nga modalitetet opsionale të shiritit të menysë që shfaqin temperaturë, aplikacioni bën dy lloje kërkesash HTTP anonime dhe të grumbulluara: një te <a href="https://ip-api.com">ip-api.com</a> për të gjetur një gjerësi dhe gjatësi gjeografike të përafërt nga adresa jote IP (e ruajtur për 24 orë), dhe një te <a href="https://open-meteo.com">open-meteo.com</a> për të marrë temperaturën aktuale në ato koordinata (e ruajtur për 10 minuta). Këto kërkesa bëhen vetëm kur një modalitet temperature është aktiv dhe nuk dërgohen tek ne. Modaliteti i parazgjedhur i shiritit të menysë nuk bën asnjë kërkesë rrjeti.`,
+        ppNet2: `Jashtë Mac App Store, klipa gjithashtu kontrollon API-n e GitHub Releases të shumtën një herë në ditë për të parë nëse ka një version më të ri të klipa. Kjo i lejon të shfaqë një element "Update available" në menu. Asnjë informacion për ty nuk dërgohet në atë kërkesë.`,
+        ppH2Lic: "Aktivizimi i licencës (vetëm versionet jashtë App Store)",
+        ppLic: `Versionet me shkarkim të drejtpërdrejtë të klipa (macOS <span class="kbd">.pkg</span>, instalues Windows, paketa Linux) përfshijnë një shkyçje me pagesë pas një prove falas 7-ditore. Nëse zgjedh të aktivizosh një çelës licence, klipa e dërgon çelësin që ngjit te <a href="https://gumroad.com">gumroad.com</a> një herë, përmes HTTPS, për të verifikuar që është i vlefshëm. Rezultati ruhet lokalisht kështu që nuk nevojiten kërkesa të mëtejshme për ta mbajtur aplikacionin të shkyçur. Versioni i Mac App Store nuk e përfshin fare këtë veçori.`,
+        ppH2Pay: "Pagesa",
+        ppPay: "Në Mac App Store, pagesa trajtohet plotësisht nga Apple; klipa nuk i sheh kurrë detajet e pagesës tënde. Për versionet me shkarkim të drejtpërdrejtë, pagesa trajtohet plotësisht nga Gumroad, tregtari ynë i regjistrimit; klipa nuk i sheh kurrë detajet e pagesës tënde as atje.",
+        ppH2Kids: "Fëmijët",
+        ppKids: "klipa është një mjet i përgjithshëm dhe nuk mbledh me vetëdije asnjë informacion nga askush, në asnjë moshë.",
+        ppH2Changes: "Ndryshimet në këtë politikë",
+        ppChanges: `Nëse kjo politikë ndryshon ndonjëherë në ndonjë mënyrë thelbësore, përditësimi do të shfaqet këtu me një datë të re "Përditësuar së fundmi". Kodi i kësaj faqeje ndodhet në <a href="https://github.com/peterdsp/klipa">depon GitHub të klipa</a>, kështu që çdo ndryshim është i dukshëm në historikun e commit-eve.`,
+        ppH2Contact: "Kontakti",
+        ppContact: `Pyetje ose shqetësime për këtë politikë ose për mënyrën si klipa i trajton të dhënat e tua: <a href="mailto:info@peterdsp.dev">info@peterdsp.dev</a>.`,
+        ppFooter: `&lt; <a href="index.html">kthehu te klipa</a> &nbsp;·&nbsp; <a href="https://github.com/peterdsp/klipa">kodi në GitHub</a>`,
+      },
+    };
+    function detect(){ try{var s=localStorage.getItem("klipa_site_lang"); if(s&&I18N[s])return s;}catch(e){} var n=(navigator.language||"en").toLowerCase(); if(n.indexOf("el")===0)return "el"; if(n.indexOf("sq")===0)return "sq"; return "en"; }
+    function apply(lang){ var d=I18N[lang]||I18N.en;
+      document.querySelectorAll("[data-i18n]").forEach(function(el){var v=d[el.getAttribute("data-i18n")]; if(v!=null)el.textContent=v;});
+      document.querySelectorAll("[data-i18n-html]").forEach(function(el){var v=d[el.getAttribute("data-i18n-html")]; if(v!=null)el.innerHTML=v;});
+      document.documentElement.lang=lang; if(d.ppTitle)document.title=d.ppTitle;
+      document.querySelectorAll(".lang-btn").forEach(function(b){var on=b.getAttribute("data-lang")===lang; b.classList.toggle("active",on); b.setAttribute("aria-pressed",String(on));});
+      try{localStorage.setItem("klipa_site_lang",lang);}catch(e){}
+    }
+    function reduce(){return window.matchMedia&&window.matchMedia("(prefers-reduced-motion: reduce)").matches;}
+    function sw(lang){ if(!reduce()&&document.startViewTransition){document.startViewTransition(function(){apply(lang);});} else {apply(lang);} }
+    document.querySelectorAll(".lang-btn").forEach(function(b){b.addEventListener("click",function(){sw(b.getAttribute("data-lang"));});});
+    apply(detect());
+    try{ if(HTMLScriptElement.supports&&HTMLScriptElement.supports("speculationrules")){var sr=document.createElement("script");sr.type="speculationrules";sr.textContent='{"prefetch":[{"source":"document","where":{"href_matches":"/*"},"eagerness":"moderate"}]}';document.head.appendChild(sr);} }catch(e){}
+  })();
+</script>
 </body>
 </html>
