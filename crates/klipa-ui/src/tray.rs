@@ -30,6 +30,10 @@ pub const AWAKE_END_ID: &str = "__klipa_awake_end";
 pub const AWAKE_DISPLAY_ID: &str = "__klipa_awake_display";
 /// Toggle "keep awake with the lid closed" (macOS non-App-Store only).
 pub const AWAKE_LID_ID: &str = "__klipa_awake_lid";
+/// Install / approve the passwordless root helper (Option B).
+pub const HELPER_INSTALL_ID: &str = "__klipa_helper_install";
+/// Remove the passwordless root helper.
+pub const HELPER_REMOVE_ID: &str = "__klipa_helper_remove";
 /// Prefix for "start a session of N seconds" items; 0 = indefinitely.
 pub const AWAKE_START_PREFIX: &str = "__klipa_awake_start:";
 /// Open the purchase page / activate with the buyer's license file.
@@ -324,11 +328,37 @@ fn build_awake_submenu(awake: &AwakeView) -> Submenu {
     if awake.lid_closed_supported {
         let _ = sub.append(&CheckMenuItem::with_id(
             AWAKE_LID_ID,
-            "Stay awake with lid closed (needs admin, runs hot)",
+            "Stay awake with lid closed (runs hot)",
             true,
             awake.lid_closed,
             None,
         ));
+        // Passwordless helper (Option B): once installed and approved,
+        // lid-closed toggles skip the admin prompt. Show exactly one
+        // relevant action for the current state.
+        if awake.helper_active {
+            let _ = sub.append(&MenuItem::new("Passwordless mode: on", false, None));
+            let _ = sub.append(&MenuItem::with_id(
+                HELPER_REMOVE_ID,
+                "Turn off passwordless mode",
+                true,
+                None,
+            ));
+        } else if awake.helper_needs_approval {
+            let _ = sub.append(&MenuItem::with_id(
+                HELPER_INSTALL_ID,
+                "Approve passwordless helper in Settings...",
+                true,
+                None,
+            ));
+        } else if awake.helper_installable {
+            let _ = sub.append(&MenuItem::with_id(
+                HELPER_INSTALL_ID,
+                "Enable passwordless mode (one-time setup)",
+                true,
+                None,
+            ));
+        }
     }
     let _ = sub.append(&MenuItem::with_id(
         AWAKE_END_ID,

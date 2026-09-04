@@ -11,6 +11,11 @@
 
 mod adapters;
 mod awake;
+// Privileged-helper control for passwordless lid-closed mode. Direct
+// (non-App-Store) macOS build only; the sandbox forbids privileged
+// helpers, so the App Store build omits it.
+#[cfg(all(target_os = "macos", not(feature = "mas")))]
+mod helper;
 mod http;
 mod license;
 mod paths;
@@ -82,7 +87,13 @@ impl Klipa {
         // The watcher depends on this even when the menu itself is
         // unchanged, so always keep it current.
         self.locked.store(gate.is_locked(), Ordering::Release);
-        let awake = self.awake.view();
+        let mut awake = self.awake.view();
+        // KeepAwake doesn't own the passwordless helper; fill its menu
+        // state in here so the "Enable/Approve/Turn off" item is correct.
+        let (helper_active, helper_needs_approval, helper_installable) = helper_flags();
+        awake.helper_active = helper_active;
+        awake.helper_needs_approval = helper_needs_approval;
+        awake.helper_installable = helper_installable;
         let notice = self.license.transient_message();
         let update = self.updater.menu_label();
 
@@ -210,11 +221,21 @@ impl ApplicationHandler for Klipa {
                     self.rebuild_menu();
                 }
                 tray::AWAKE_LID_ID => {
-                    // Toggling this may prompt for an admin password (to
-                    // set or clear the system sleep flag) and blocks on the
-                    // OS auth dialog; that's the expected, deliberate cost.
+                    // Toggling this sets or clears the system sleep flag.
+                    // With the passwordless helper installed it is silent;
+                    // otherwise it blocks on the OS admin dialog once.
                     let next = !self.awake.lid_closed();
                     self.awake.set_lid_closed(next);
+                    self.rebuild_menu();
+                }
+                tray::HELPER_INSTALL_ID => {
+                    #[cfg(all(target_os = "macos", not(feature = "mas")))]
+                    helper::install();
+                    self.rebuild_menu();
+                }
+                tray::HELPER_REMOVE_ID => {
+                    #[cfg(all(target_os = "macos", not(feature = "mas")))]
+                    helper::remove();
                     self.rebuild_menu();
                 }
                 other if tray::parse_awake_start(other).is_some() => {
@@ -275,6 +296,24 @@ impl ApplicationHandler for Klipa {
     }
 }
 
+/// Current passwordless-helper flags `(active, needs_approval, installable)`
+/// for the menu. Only the direct macOS build has a helper; everywhere else
+/// this is a cheap constant so the menu code stays platform-agnostic.
+#[cfg(all(target_os = "macos", not(feature = "mas")))]
+fn helper_flags() -> (bool, bool, bool) {
+    match helper::state() {
+        helper::State::Active => (true, false, false),
+        helper::State::NeedsApproval => (false, true, false),
+        helper::State::NotInstalled => (false, false, true),
+        helper::State::Unavailable => (false, false, false),
+    }
+}
+
+#[cfg(not(all(target_os = "macos", not(feature = "mas"))))]
+fn helper_flags() -> (bool, bool, bool) {
+    (false, false, false)
+}
+
 /// Hash of everything the tray menu renders, so identical rebuilds can
 /// be skipped (see `Klipa::rebuild_menu`). Cheap: one pass over the
 /// entries the dropdown actually shows.
@@ -298,6 +337,9 @@ fn menu_signature(
     awake.allow_display_sleep.hash(&mut h);
     awake.lid_closed.hash(&mut h);
     awake.lid_closed_supported.hash(&mut h);
+    awake.helper_active.hash(&mut h);
+    awake.helper_needs_approval.hash(&mut h);
+    awake.helper_installable.hash(&mut h);
     awake.status.hash(&mut h);
     match gate {
         license::Gate::Full => 0u8.hash(&mut h),

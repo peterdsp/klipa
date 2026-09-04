@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  LaunchDaemon for klipa's privileged root helper (Option B: passwordless
+  "keep awake with the lid closed"). Registered by the app through
+  SMAppService, so it must ship inside the app bundle at
+  Contents/Library/LaunchDaemons/dev.peterdsp.klipa.helper.plist and the
+  helper executable at Contents/MacOS/klipa-helper, both signed with the
+  same Team ID as the app.
+
+  Direct-download build only. The sandboxed App Store build never bundles
+  this file or the helper binary.
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>dev.peterdsp.klipa.helper</string>
+
+    <!-- Path is relative to the app bundle root. SMAppService resolves it
+         inside Contents/ of the registering app. -->
+    <key>BundleProgram</key>
+    <string>Contents/MacOS/klipa-helper</string>
+
+    <!-- Resident listener: start at load and relaunch if it ever exits,
+         so the app can reach its socket whenever a session starts. -->
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+
+    <key>StandardOutPath</key>
+    <string>/Library/Logs/dev.peterdsp.klipa.helper.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Library/Logs/dev.peterdsp.klipa.helper.log</string>
+
+    <!-- Ties the daemon to the app so SMAppService can manage and display
+         it in System Settings > Login Items. -->
+    <key>AssociatedBundleIdentifiers</key>
+    <array>
+        <string>dev.peterdsp.klipa</string>
+    </array>
+</dict>
+</plist>

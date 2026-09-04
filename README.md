@@ -123,6 +123,19 @@ On Linux the idle inhibitor covers the whole idle path (screen blank +
 auto-suspend together), so **Allow display sleep** has no separate
 effect there.
 
+#### Stay awake with the lid closed (macOS, direct download)
+
+An idle assertion can't override a lid close, that's an explicit sleep
+request, so **Keep awake** also has **Stay awake with lid closed** on the
+direct-download macOS build. It sets the system `disablesleep` power flag
+via `pmset` and restores it when the session ends, so timed sessions still
+sleep at the moment you set. Optionally **Enable passwordless mode** to
+approve a small signed root helper once (System Settings > Login Items),
+after which lid-closed toggles never prompt for a password. A closed lid
+can't shed heat, so use a bounded session, ideally on the charger. Not
+available in the App Store build, whose sandbox forbids the required
+privileges. See [docs/lid-closed-keep-awake.md](docs/lid-closed-keep-awake.md).
+
 ### Menu bar display
 
 Open **Menu bar** and pick what appears next to the tray icon:
@@ -162,11 +175,13 @@ there is nothing to render.
 klipa/
 ├── crates/klipa-core/   ← Domain: entities, ports, use cases (pure Rust, no I/O, no OS)
 │   └── src/{domain,usecases}
+├── crates/klipa-helper/ ← macOS root daemon: toggles system sleep (passwordless lid-closed)
 └── crates/klipa-ui/     ← Shell: tray UI + OS adapters
     └── src/
         ├── adapters/    clipboard / storage (JSON) / watcher  (impl core ports)
         ├── tray.rs      menubar icon + history dropdown (tray-icon + muda)
         ├── awake.rs     keep-awake sessions (caffeinate/Win32/systemd-inhibit)
+        ├── helper.rs    control the root helper (SMAppService; direct macOS build)
         ├── license.rs   7-day trial + €1.99 unlock (off in the App Store build)
         ├── settings.rs  persistent user prefs (menu bar display mode)
         ├── weather.rs   opt-in IP location + open-meteo temperature

@@ -1,0 +1,17 @@
+[package]
+name = "klipa-helper"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Privileged root helper for klipa: toggles macOS system sleep on request (lid-closed keep-awake)."
+repository.workspace = true
+authors.workspace = true
+
+[[bin]]
+name = "klipa-helper"
+path = "src/main.rs"
+
+# Intentionally dependency-free. This binary runs as root, so its whole
+# job and its entire attack surface stay auditable in one small file of
+# pure std: accept a whitelisted command on a local socket, run `pmset`.
+[dependencies]
