@@ -17,6 +17,7 @@
 //! bookkeeping (timer, display-sleep flag) lives here; the small
 //! platform module below is the only OS-specific part.
 
+use crate::clamshell::ClamshellStatus;
 use std::time::{Duration, Instant};
 
 /// A running (or stopped) keep-awake session.
@@ -53,6 +54,10 @@ pub struct AwakeView {
     pub helper_active: bool,
     pub helper_needs_approval: bool,
     pub helper_installable: bool,
+    /// What happens if the lid closes now (external display / power).
+    /// Sandbox-safe and shown in every build; filled in by the
+    /// composition root, so `view` defaults it to `Hidden`.
+    pub clamshell: ClamshellStatus,
 }
 
 impl KeepAwake {
@@ -185,6 +190,7 @@ impl KeepAwake {
             helper_active: false,
             helper_needs_approval: false,
             helper_installable: false,
+            clamshell: ClamshellStatus::Hidden,
         }
     }
 }
