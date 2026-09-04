@@ -28,6 +28,8 @@ pub const QUIT_ID: &str = "__klipa_quit";
 /// Keep-awake actions.
 pub const AWAKE_END_ID: &str = "__klipa_awake_end";
 pub const AWAKE_DISPLAY_ID: &str = "__klipa_awake_display";
+/// Toggle "keep awake with the lid closed" (macOS non-App-Store only).
+pub const AWAKE_LID_ID: &str = "__klipa_awake_lid";
 /// Prefix for "start a session of N seconds" items; 0 = indefinitely.
 pub const AWAKE_START_PREFIX: &str = "__klipa_awake_start:";
 /// Open the purchase page / activate with the buyer's license file.
@@ -314,6 +316,20 @@ fn build_awake_submenu(awake: &AwakeView) -> Submenu {
         awake.allow_display_sleep,
         None,
     ));
+    // Lid-closed keep-awake only exists where the OS lets us set it (the
+    // non-App-Store macOS build); hide the toggle entirely elsewhere so it
+    // never shows a control that would do nothing. Toggling it prompts for
+    // an admin password, and the machine has no way to shed heat with the
+    // lid shut, so the label names the trade-off plainly.
+    if awake.lid_closed_supported {
+        let _ = sub.append(&CheckMenuItem::with_id(
+            AWAKE_LID_ID,
+            "Stay awake with lid closed (needs admin, runs hot)",
+            true,
+            awake.lid_closed,
+            None,
+        ));
+    }
     let _ = sub.append(&MenuItem::with_id(
         AWAKE_END_ID,
         "End current session",
