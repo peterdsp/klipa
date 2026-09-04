@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/klipa-core", "crates/klipa-ui"]
+members = ["crates/klipa-core", "crates/klipa-ui", "crates/klipa-helper"]
 resolver = "2"
 
 [workspace.package]

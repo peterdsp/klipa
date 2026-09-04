@@ -44,6 +44,15 @@ pub struct AwakeView {
     /// everywhere except the non-App-Store macOS build, so the menu can
     /// hide the toggle where it would do nothing.
     pub lid_closed_supported: bool,
+    /// Passwordless-helper state, for the "Enable passwordless mode" menu
+    /// entries. `KeepAwake` doesn't own the helper, so `view` leaves these
+    /// at their defaults and the composition root fills them in.
+    /// `helper_installable` is true only when setup is actually offerable
+    /// (macOS 13+, not yet registered), so the menu stays clean on older
+    /// systems where only the admin-prompt path exists.
+    pub helper_active: bool,
+    pub helper_needs_approval: bool,
+    pub helper_installable: bool,
 }
 
 impl KeepAwake {
@@ -172,6 +181,10 @@ impl KeepAwake {
             allow_display_sleep: self.allow_display_sleep,
             lid_closed: self.lid_closed,
             lid_closed_supported: platform::LID_CLOSED_SUPPORTED,
+            // Filled in by the composition root, which owns helper state.
+            helper_active: false,
+            helper_needs_approval: false,
+            helper_installable: false,
         }
     }
 }
@@ -274,15 +287,31 @@ mod platform {
         }
     }
 
-    /// Flip the system-wide `disablesleep` power flag through the standard
-    /// macOS admin-authentication dialog. `osascript ... with administrator
+    /// Flip the system-wide `disablesleep` power flag. Runs `pmset` as
+    /// root, the only lever that keeps the machine awake when the lid is
+    /// physically closed (a lid close is an explicit sleep request that no
+    /// power assertion overrides). Returns whether the change applied.
+    ///
+    /// Prefers the installed root helper (Option B): when it is registered,
+    /// approved, and listening, the toggle is passwordless. Otherwise falls
+    /// back to a one-off admin prompt (Option A), so the feature still
+    /// works before, or without ever, setting the helper up.
+    fn set_disablesleep(on: bool) -> bool {
+        #[cfg(not(feature = "mas"))]
+        {
+            if crate::helper::set_disablesleep(on) {
+                return true;
+            }
+        }
+        set_disablesleep_prompt(on)
+    }
+
+    /// Option A path: flip the flag through the standard macOS
+    /// admin-authentication dialog. `osascript ... with administrator
     /// privileges` shows the OS's own password prompt: the user
     /// authenticates to the system, not to klipa, and we never see or
-    /// handle the password. Runs `pmset` as root, the only lever that keeps
-    /// the machine awake when the lid is physically closed (a lid close is
-    /// an explicit sleep request that no power assertion overrides).
-    /// Returns whether the change applied.
-    fn set_disablesleep(on: bool) -> bool {
+    /// handle the password.
+    fn set_disablesleep_prompt(on: bool) -> bool {
         let val = if on { "1" } else { "0" };
         // `-a`: apply on both battery and charger, so the feature is not
         // silently a no-op on battery. Heat/battery cost is surfaced in
