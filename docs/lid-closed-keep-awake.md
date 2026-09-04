@@ -187,6 +187,42 @@ feature is built with that firmly in mind:
   closed is exactly the highest-risk mode. Prefer a bounded session on
   charger.
 
+## Sandbox-safe clamshell status (every build, App Store included)
+
+Overriding lid-close sleep needs root, so it is direct-download only. But a
+sandboxed app can still *read* whether closing the lid will keep the Mac
+running, and tell the user honestly. That is the one App-Store-compliant
+thing to do here, and klipa ships it in **every** build.
+
+[`clamshell.rs`](../crates/klipa-ui/src/clamshell.rs) reads, via public
+CoreGraphics and IOKit calls (all allowed in the App Sandbox, no
+entitlement):
+
+- whether an **external display** is attached (`CGGetActiveDisplayList` +
+  `CGDisplayIsBuiltin`),
+- the **power source** (`IOPSGetProvidingPowerSourceType`),
+- whether the Mac is **Apple Silicon** (`sysctlbyname("hw.optional.arm64")`,
+  correct even under Rosetta).
+
+A MacBook runs with the lid closed only in Apple's supported clamshell
+mode: an external display attached, plus AC power on Intel (Apple Silicon
+can run clamshell on battery). The Keep-awake submenu shows one honest
+line reflecting that:
+
+- `Lid closed: stays awake (external display)`
+- `Lid closed: connect power to stay awake` (Intel, external display, on battery)
+- `Lid closed: Mac will sleep` (no external display)
+- and, in the direct build while a lid-closed session is active,
+  `Lid closed: kept awake by klipa` (klipa's override wins over the OS default).
+
+On a desktop Mac (no built-in display) or off macOS, no line is shown.
+
+This is why the App Store build is not left with nothing: it cannot force
+lid-closed operation (no sandboxed app can, the only lever is a private
+Apple-only entitlement or root), but it can always tell the truth about
+what the lid will do. See the fuller investigation for the exact API
+boundary.
+
 ## Files touched
 
 - [`crates/klipa-ui/src/awake.rs`](../crates/klipa-ui/src/awake.rs): the
@@ -197,6 +233,8 @@ feature is built with that firmly in mind:
 - [`crates/klipa-helper`](../crates/klipa-helper): the root daemon.
 - [`packaging/macos/dev.peterdsp.klipa.helper.plist`](../packaging/macos/dev.peterdsp.klipa.helper.plist):
   the LaunchDaemon plist bundled in the app.
+- [`crates/klipa-ui/src/clamshell.rs`](../crates/klipa-ui/src/clamshell.rs):
+  sandbox-safe lid-close outlook detection (all builds, App Store included).
 - [`crates/klipa-ui/src/paths.rs`](../crates/klipa-ui/src/paths.rs): the
   `lid_awake_marker` sentinel path.
 - [`crates/klipa-ui/src/tray.rs`](../crates/klipa-ui/src/tray.rs): the

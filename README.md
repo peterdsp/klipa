@@ -181,6 +181,7 @@ klipa/
         ├── adapters/    clipboard / storage (JSON) / watcher  (impl core ports)
         ├── tray.rs      menubar icon + history dropdown (tray-icon + muda)
         ├── awake.rs     keep-awake sessions (caffeinate/Win32/systemd-inhibit)
+        ├── clamshell.rs sandbox-safe "will the lid sleep the Mac?" status (macOS)
         ├── helper.rs    control the root helper (SMAppService; direct macOS build)
         ├── license.rs   7-day trial + €1.99 unlock (off in the App Store build)
         ├── settings.rs  persistent user prefs (menu bar display mode)

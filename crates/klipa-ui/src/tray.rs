@@ -6,6 +6,7 @@
 
 use crate::adapters::clipboard::{decode_png, read_image_png};
 use crate::awake::AwakeView;
+use crate::clamshell::ClamshellStatus;
 use crate::license::Gate;
 use crate::settings::MenubarDisplay;
 use klipa_core::{HistoryItem, ItemKind};
@@ -295,6 +296,17 @@ fn build_settings_submenu(
     sub
 }
 
+/// The lid-close outlook line, or `None` on a desktop Mac / non-macOS /
+/// when detection is unavailable (then no line is shown).
+fn clamshell_label(status: ClamshellStatus) -> Option<&'static str> {
+    match status {
+        ClamshellStatus::StaysAwake => Some("Lid closed: stays awake (external display)"),
+        ClamshellStatus::NeedsPower => Some("Lid closed: connect power to stay awake"),
+        ClamshellStatus::WillSleep => Some("Lid closed: Mac will sleep"),
+        ClamshellStatus::Hidden => None,
+    }
+}
+
 /// Build the "Keep awake" submenu: a status line when active, the
 /// duration presets, the display-sleep toggle, and an end action.
 fn build_awake_submenu(awake: &AwakeView) -> Submenu {
@@ -303,6 +315,20 @@ fn build_awake_submenu(awake: &AwakeView) -> Submenu {
 
     if let Some(status) = &awake.status {
         let _ = sub.append(&MenuItem::new(status, false, None));
+        let _ = sub.append(&PredefinedMenuItem::separator());
+    }
+
+    // Honest lid-close outlook (macOS laptops). If klipa is actively
+    // holding the Mac awake through a lid close (direct build), that
+    // overrides the OS default; otherwise report what macOS does on its
+    // own so the user knows whether closing the lid will keep working.
+    let lid_line = if awake.active && awake.lid_closed && awake.lid_closed_supported {
+        Some("Lid closed: kept awake by klipa")
+    } else {
+        clamshell_label(awake.clamshell)
+    };
+    if let Some(line) = lid_line {
+        let _ = sub.append(&MenuItem::new(line, false, None));
         let _ = sub.append(&PredefinedMenuItem::separator());
     }
 

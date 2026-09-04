@@ -11,6 +11,9 @@
 
 mod adapters;
 mod awake;
+// Sandbox-safe "will the Mac sleep if I close the lid?" detection. Ships
+// in every build, including the App Store one.
+mod clamshell;
 // Privileged-helper control for passwordless lid-closed mode. Direct
 // (non-App-Store) macOS build only; the sandbox forbids privileged
 // helpers, so the App Store build omits it.
@@ -94,6 +97,9 @@ impl Klipa {
         awake.helper_active = helper_active;
         awake.helper_needs_approval = helper_needs_approval;
         awake.helper_installable = helper_installable;
+        // Sandbox-safe read of the current lid-close outcome (external
+        // display / power), refreshed each rebuild so it tracks hotplug.
+        awake.clamshell = clamshell::status();
         let notice = self.license.transient_message();
         let update = self.updater.menu_label();
 
@@ -340,6 +346,7 @@ fn menu_signature(
     awake.helper_active.hash(&mut h);
     awake.helper_needs_approval.hash(&mut h);
     awake.helper_installable.hash(&mut h);
+    (awake.clamshell as u8).hash(&mut h);
     awake.status.hash(&mut h);
     match gate {
         license::Gate::Full => 0u8.hash(&mut h),
