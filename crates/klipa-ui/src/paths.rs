@@ -34,3 +34,13 @@ pub fn license_file() -> Option<PathBuf> {
 pub fn settings_file() -> Option<PathBuf> {
     data_dir().map(|d| d.join("settings.json"))
 }
+
+/// Sentinel written while a "keep awake with the lid closed" session has
+/// the system-wide `disablesleep` power flag set. Because that flag
+/// outlives a crash or force-quit, its presence at startup means a
+/// previous run left sleep disabled and we must restore it. macOS
+/// (non-App-Store) build only; harmless to compute elsewhere.
+#[cfg_attr(any(not(target_os = "macos"), feature = "mas"), allow(dead_code))]
+pub fn lid_awake_marker() -> Option<PathBuf> {
+    data_dir().map(|d| d.join("lid_awake.on"))
+}

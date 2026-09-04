@@ -173,6 +173,11 @@ impl ApplicationHandler for Klipa {
         for id in tray::poll_menu_events() {
             match id.as_ref() {
                 tray::QUIT_ID => {
+                    // End any session before exiting so a lid-closed
+                    // session restores normal sleep (its one admin prompt)
+                    // while the app is still alive, rather than during
+                    // teardown. No-op for a plain idle session.
+                    self.awake.end();
                     event_loop.exit();
                     return;
                 }
@@ -202,6 +207,14 @@ impl ApplicationHandler for Klipa {
                 tray::AWAKE_DISPLAY_ID => {
                     let next = !self.awake.allow_display_sleep();
                     self.awake.set_allow_display_sleep(next);
+                    self.rebuild_menu();
+                }
+                tray::AWAKE_LID_ID => {
+                    // Toggling this may prompt for an admin password (to
+                    // set or clear the system sleep flag) and blocks on the
+                    // OS auth dialog; that's the expected, deliberate cost.
+                    let next = !self.awake.lid_closed();
+                    self.awake.set_lid_closed(next);
                     self.rebuild_menu();
                 }
                 other if tray::parse_awake_start(other).is_some() => {
@@ -283,6 +296,8 @@ fn menu_signature(
     }
     awake.active.hash(&mut h);
     awake.allow_display_sleep.hash(&mut h);
+    awake.lid_closed.hash(&mut h);
+    awake.lid_closed_supported.hash(&mut h);
     awake.status.hash(&mut h);
     match gate {
         license::Gate::Full => 0u8.hash(&mut h),
@@ -330,6 +345,13 @@ fn main() {
         .build()
         .expect("tokio runtime");
     let handle = runtime.handle().clone();
+
+    // If a previous run was keeping the Mac awake with the lid closed and
+    // exited uncleanly (crash, force-quit, power loss), it may have left
+    // system sleep disabled. Restore it before anything else so klipa
+    // never silently leaves a machine unable to sleep. Only prompts when
+    // the flag is genuinely still set; no-op off the macOS direct build.
+    awake::recover_lid_closed();
 
     // Load persisted settings first so we can seed HistoryService with
     // the user's chosen cap.
