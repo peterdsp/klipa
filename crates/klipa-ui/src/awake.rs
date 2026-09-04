@@ -78,11 +78,6 @@ impl KeepAwake {
         self.lid_closed
     }
 
-    /// Whether this build can keep the Mac awake with the lid closed.
-    pub fn lid_closed_supported(&self) -> bool {
-        platform::LID_CLOSED_SUPPORTED
-    }
-
     /// Flip the lid-closed preference. Restarts an active session so the
     /// new mode takes effect immediately: turning it on prompts for an
     /// admin password (the OS sets the `disablesleep` flag), turning it
