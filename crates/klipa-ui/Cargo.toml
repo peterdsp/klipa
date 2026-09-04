@@ -83,6 +83,12 @@ ed25519-compact = { version = "2", optional = true, default-features = false }
 objc2 = "0.5"
 objc2-app-kit = { version = "0.2", features = ["NSApplication"] }
 objc2-foundation = "0.2"
+# App-side control of the optional privileged root helper that powers
+# passwordless "keep awake with the lid closed" (Option B). A thin wrapper
+# over SMAppService: register / unregister / status. Only the
+# direct-download build uses it; the sandboxed App Store (`mas`) build
+# compiles `helper.rs` out entirely (see `#[cfg(not(feature = "mas"))]`).
+smappservice-rs = "0.1"
 
 # ── Linux .deb (cargo-deb) ────────────────────────────────────────────
 # Run from workspace root:  cargo deb -p klipa-ui --no-build

@@ -6,6 +6,7 @@
 
 use crate::adapters::clipboard::{decode_png, read_image_png};
 use crate::awake::AwakeView;
+use crate::clamshell::ClamshellStatus;
 use crate::license::Gate;
 use crate::settings::MenubarDisplay;
 use klipa_core::{HistoryItem, ItemKind};
@@ -28,6 +29,12 @@ pub const QUIT_ID: &str = "__klipa_quit";
 /// Keep-awake actions.
 pub const AWAKE_END_ID: &str = "__klipa_awake_end";
 pub const AWAKE_DISPLAY_ID: &str = "__klipa_awake_display";
+/// Toggle "keep awake with the lid closed" (macOS non-App-Store only).
+pub const AWAKE_LID_ID: &str = "__klipa_awake_lid";
+/// Install / approve the passwordless root helper (Option B).
+pub const HELPER_INSTALL_ID: &str = "__klipa_helper_install";
+/// Remove the passwordless root helper.
+pub const HELPER_REMOVE_ID: &str = "__klipa_helper_remove";
 /// Prefix for "start a session of N seconds" items; 0 = indefinitely.
 pub const AWAKE_START_PREFIX: &str = "__klipa_awake_start:";
 /// Open the purchase page / activate with the buyer's license file.
@@ -289,6 +296,17 @@ fn build_settings_submenu(
     sub
 }
 
+/// The lid-close outlook line, or `None` on a desktop Mac / non-macOS /
+/// when detection is unavailable (then no line is shown).
+fn clamshell_label(status: ClamshellStatus) -> Option<&'static str> {
+    match status {
+        ClamshellStatus::StaysAwake => Some("Lid closed: stays awake (external display)"),
+        ClamshellStatus::NeedsPower => Some("Lid closed: connect power to stay awake"),
+        ClamshellStatus::WillSleep => Some("Lid closed: Mac will sleep"),
+        ClamshellStatus::Hidden => None,
+    }
+}
+
 /// Build the "Keep awake" submenu: a status line when active, the
 /// duration presets, the display-sleep toggle, and an end action.
 fn build_awake_submenu(awake: &AwakeView) -> Submenu {
@@ -297,6 +315,20 @@ fn build_awake_submenu(awake: &AwakeView) -> Submenu {
 
     if let Some(status) = &awake.status {
         let _ = sub.append(&MenuItem::new(status, false, None));
+        let _ = sub.append(&PredefinedMenuItem::separator());
+    }
+
+    // Honest lid-close outlook (macOS laptops). If klipa is actively
+    // holding the Mac awake through a lid close (direct build), that
+    // overrides the OS default; otherwise report what macOS does on its
+    // own so the user knows whether closing the lid will keep working.
+    let lid_line = if awake.active && awake.lid_closed && awake.lid_closed_supported {
+        Some("Lid closed: kept awake by klipa")
+    } else {
+        clamshell_label(awake.clamshell)
+    };
+    if let Some(line) = lid_line {
+        let _ = sub.append(&MenuItem::new(line, false, None));
         let _ = sub.append(&PredefinedMenuItem::separator());
     }
 
@@ -314,6 +346,46 @@ fn build_awake_submenu(awake: &AwakeView) -> Submenu {
         awake.allow_display_sleep,
         None,
     ));
+    // Lid-closed keep-awake only exists where the OS lets us set it (the
+    // non-App-Store macOS build); hide the toggle entirely elsewhere so it
+    // never shows a control that would do nothing. Toggling it prompts for
+    // an admin password, and the machine has no way to shed heat with the
+    // lid shut, so the label names the trade-off plainly.
+    if awake.lid_closed_supported {
+        let _ = sub.append(&CheckMenuItem::with_id(
+            AWAKE_LID_ID,
+            "Stay awake with lid closed (runs hot)",
+            true,
+            awake.lid_closed,
+            None,
+        ));
+        // Passwordless helper (Option B): once installed and approved,
+        // lid-closed toggles skip the admin prompt. Show exactly one
+        // relevant action for the current state.
+        if awake.helper_active {
+            let _ = sub.append(&MenuItem::new("Passwordless mode: on", false, None));
+            let _ = sub.append(&MenuItem::with_id(
+                HELPER_REMOVE_ID,
+                "Turn off passwordless mode",
+                true,
+                None,
+            ));
+        } else if awake.helper_needs_approval {
+            let _ = sub.append(&MenuItem::with_id(
+                HELPER_INSTALL_ID,
+                "Approve passwordless helper in Settings...",
+                true,
+                None,
+            ));
+        } else if awake.helper_installable {
+            let _ = sub.append(&MenuItem::with_id(
+                HELPER_INSTALL_ID,
+                "Enable passwordless mode (one-time setup)",
+                true,
+                None,
+            ));
+        }
+    }
     let _ = sub.append(&MenuItem::with_id(
         AWAKE_END_ID,
         "End current session",

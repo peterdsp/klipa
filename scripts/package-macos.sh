@@ -20,6 +20,14 @@ PKG="dist/klipa-${VERSION}-macos.pkg"
 TARGET="${TARGET:-universal}" ./scripts/bundle-macos.sh
 
 if [ -n "${DEV_ID_APP:-}" ]; then
+  # Sign inside-out: the nested privileged helper first, then the app.
+  # The helper needs the hardened runtime + a timestamp but no special
+  # entitlements. It is absent from the App Store build, hence the guard.
+  if [ -f "$APP/Contents/MacOS/klipa-helper" ]; then
+    echo "==> codesign privileged helper (hardened runtime)"
+    codesign --force --options runtime --timestamp \
+      --sign "$DEV_ID_APP" "$APP/Contents/MacOS/klipa-helper"
+  fi
   echo "==> codesign app (hardened runtime)"
   codesign --force --options runtime --timestamp \
     --entitlements packaging/macos/entitlements.plist \
