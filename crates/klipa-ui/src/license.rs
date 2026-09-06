@@ -4,10 +4,11 @@
 //! app locks to a paywall until the buyer activates. Payment is handled
 //! on Ko-fi; the self-hosted license server (see
 //! `scripts/pi-license-server/`) emails each buyer an Ed25519-signed
-//! license tied to the email they used at checkout. To activate, the
-//! user copies that email to the clipboard and clicks Activate: the app
-//! posts the email to the server, gets the signed license back, and
-//! verifies the signature offline against the embedded public key.
+//! `.klipa` license file tied to the email they used at checkout. To
+//! activate, the user copies the contents of that `.klipa` file to the
+//! clipboard and clicks Activate: the app verifies the signature offline
+//! against the embedded public key. No network at activation, and knowing
+//! the buyer's email alone is not enough; you need the signed file itself.
 //!
 //! The Mac App Store build is a paid app, so it carries no licensing
 //! code at all - everything here is behind the `license` feature, and a
