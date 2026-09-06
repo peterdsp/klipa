@@ -100,6 +100,18 @@ happens in the daemon.
   rejected, so a compromise of the app can only toggle system sleep, never
   run arbitrary code as root. This matches the chosen scope: the helper
   does the power toggle and nothing else.
+- **Embedded `Info.plist` (required).** `SMAppService` only registers a
+  daemon whose helper executable carries a bundle identifier, which for a
+  plain (non-Xcode) binary means an `Info.plist` in the Mach-O
+  `__TEXT,__info_plist` section. A stock Rust build emits none, so
+  registration silently fails and no daemon is ever created (the app then
+  falls back to Option A). [`crates/klipa-helper/build.rs`](../crates/klipa-helper/build.rs)
+  generates a minimal `Info.plist` (bundle id `dev.peterdsp.klipa.helper`,
+  version tracking the crate) and injects it with
+  `-Wl,-sectcreate,__TEXT,__info_plist`. This also makes `codesign` stamp
+  the binary with that identifier instead of the filename, matching the
+  daemon's launchd `Label`. This was missing in 0.5.0 (passwordless mode
+  never registered on device); fixed in 0.5.1.
 - **Bundling and signing.** The daemon binary ships at
   `Contents/MacOS/klipa-helper` and its plist at
   `Contents/Library/LaunchDaemons/dev.peterdsp.klipa.helper.plist`, both
