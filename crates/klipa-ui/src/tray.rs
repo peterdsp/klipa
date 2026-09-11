@@ -322,7 +322,12 @@ fn build_awake_submenu(awake: &AwakeView) -> Submenu {
     // holding the Mac awake through a lid close (direct build), that
     // overrides the OS default; otherwise report what macOS does on its
     // own so the user knows whether closing the lid will keep working.
-    let lid_line = if awake.active && awake.lid_closed && awake.lid_closed_supported {
+    let lid_line = if awake.lid_closed_blocked {
+        // The user asked for lid-closed but the system refused the change
+        // (policy on a managed Mac) or the admin prompt was declined. Say so
+        // plainly rather than showing an enabled session that isn't real.
+        Some("Lid closed: couldn't enable (blocked or declined)")
+    } else if awake.active && awake.lid_closed && awake.lid_closed_supported {
         Some("Lid closed: kept awake by klipa")
     } else {
         clamshell_label(awake.clamshell)
