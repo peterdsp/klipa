@@ -31,6 +31,11 @@ pub struct KeepAwake {
     /// If true, sessions also keep the machine awake with the lid closed
     /// (macOS non-App-Store only). Ignored where unsupported.
     lid_closed: bool,
+    /// Set when a lid-closed session was requested but could not actually
+    /// engage: the system refused the `disablesleep` change (policy on a
+    /// managed Mac) or the admin prompt was declined. Lets the UI say so
+    /// instead of silently doing nothing, or worse, looking enabled.
+    lid_closed_blocked: bool,
 }
 
 /// Snapshot of the session for rendering the menu.
@@ -54,6 +59,9 @@ pub struct AwakeView {
     pub helper_active: bool,
     pub helper_needs_approval: bool,
     pub helper_installable: bool,
+    /// True when the last lid-closed request could not be applied (blocked
+    /// by policy or declined), so the menu can say so honestly.
+    pub lid_closed_blocked: bool,
     /// What happens if the lid closes now (external display / power).
     /// Sandbox-safe and shown in every build; filled in by the
     /// composition root, so `view` defaults it to `Hidden`.
@@ -67,6 +75,7 @@ impl KeepAwake {
             deadline: None,
             allow_display_sleep: false,
             lid_closed: false,
+            lid_closed_blocked: false,
         }
     }
 
@@ -116,6 +125,11 @@ impl KeepAwake {
         if self.backend.is_none() {
             // Engaging the OS lock failed; don't pretend we're awake.
             self.deadline = None;
+            // If this was a lid-closed request, the failure is the system
+            // refusing the `disablesleep` change (or a declined prompt), not
+            // a plain assertion failure. Remember it so the menu can be
+            // honest rather than showing an enabled session that isn't real.
+            self.lid_closed_blocked = self.lid_closed;
         }
     }
 
@@ -124,6 +138,7 @@ impl KeepAwake {
         // Dropping the backend releases the OS wake lock.
         self.backend = None;
         self.deadline = None;
+        self.lid_closed_blocked = false;
     }
 
     /// Reap a session whose timer elapsed (or whose helper process
@@ -181,6 +196,7 @@ impl KeepAwake {
             allow_display_sleep: self.allow_display_sleep,
             lid_closed: self.lid_closed,
             lid_closed_supported: platform::LID_CLOSED_SUPPORTED,
+            lid_closed_blocked: self.lid_closed_blocked,
             // Filled in by the composition root, which owns helper state.
             helper_active: false,
             helper_needs_approval: false,
@@ -298,13 +314,24 @@ mod platform {
     /// back to a one-off admin prompt (Option A), so the feature still
     /// works before, or without ever, setting the helper up.
     fn set_disablesleep(on: bool) -> bool {
+        // Attempt the change: the passwordless helper first (when present),
+        // else the admin prompt.
         #[cfg(not(feature = "mas"))]
         {
-            if crate::helper::set_disablesleep(on) {
-                return true;
+            if !crate::helper::set_disablesleep(on) {
+                set_disablesleep_prompt(on);
             }
         }
-        set_disablesleep_prompt(on)
+        #[cfg(feature = "mas")]
+        {
+            set_disablesleep_prompt(on);
+        }
+        // Trust the real system state, not the exit code. A managed Mac can
+        // accept the admin auth (or restrict `osascript`'s privileged exec)
+        // so that `pmset` reports success yet `disablesleep` never actually
+        // changes. Report success only if the flag really flipped, so the
+        // caller never claims a lid-closed session that isn't in effect.
+        sleep_currently_disabled() == on
     }
 
     /// Option A path: flip the flag through the standard macOS
