@@ -346,7 +346,7 @@ fn menu_signature(
     awake.helper_active.hash(&mut h);
     awake.helper_needs_approval.hash(&mut h);
     awake.helper_installable.hash(&mut h);
-    awake.lid_closed_blocked.hash(&mut h);
+    awake.lid_closed_block.map(|b| b as u8).hash(&mut h);
     (awake.clamshell as u8).hash(&mut h);
     awake.status.hash(&mut h);
     match gate {
