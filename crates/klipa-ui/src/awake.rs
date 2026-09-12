@@ -20,6 +20,35 @@
 use crate::clamshell::ClamshellStatus;
 use std::time::{Duration, Instant};
 
+/// Why a lid-closed session could not actually engage. Lets the menu name
+/// the real cause instead of one vague "blocked or declined" catch-all.
+///
+/// Off macOS these are never constructed (lid-closed is macOS-only), so the
+/// variants read as dead code there; they are real where it matters.
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+#[derive(Copy, Clone, PartialEq, Eq)]
+pub enum LidBlock {
+    /// The admin password prompt was cancelled by the user.
+    Declined,
+    /// The change ran without error but the system never applied it: a
+    /// managed Mac's power policy silently overrides `disablesleep`.
+    Refused,
+    /// The mechanism itself could not run (`osascript`/`pmset` missing or
+    /// errored), so we never even reached the system.
+    Unavailable,
+}
+
+/// Why `Backend::engage` failed. Separates a plain wake-lock failure from a
+/// lid-closed failure so only the latter carries a user-facing reason.
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+pub enum EngageErr {
+    /// The base OS wake lock (IOKit assertion / execution state) failed.
+    Assertion,
+    /// The wake lock held, but the lid-closed change did not, for this
+    /// reason.
+    Lid(LidBlock),
+}
+
 /// A running (or stopped) keep-awake session.
 pub struct KeepAwake {
     /// The live OS wake lock; `None` while idle. Dropping it releases.
@@ -32,10 +61,11 @@ pub struct KeepAwake {
     /// (macOS non-App-Store only). Ignored where unsupported.
     lid_closed: bool,
     /// Set when a lid-closed session was requested but could not actually
-    /// engage: the system refused the `disablesleep` change (policy on a
-    /// managed Mac) or the admin prompt was declined. Lets the UI say so
-    /// instead of silently doing nothing, or worse, looking enabled.
-    lid_closed_blocked: bool,
+    /// engage, with the specific reason (declined prompt, system refusal,
+    /// mechanism unavailable). Lets the UI say exactly why instead of
+    /// silently doing nothing, or worse, looking enabled. `None` means the
+    /// last request either succeeded or was never a lid-closed request.
+    lid_closed_block: Option<LidBlock>,
 }
 
 /// Snapshot of the session for rendering the menu.
@@ -59,9 +89,10 @@ pub struct AwakeView {
     pub helper_active: bool,
     pub helper_needs_approval: bool,
     pub helper_installable: bool,
-    /// True when the last lid-closed request could not be applied (blocked
-    /// by policy or declined), so the menu can say so honestly.
-    pub lid_closed_blocked: bool,
+    /// Set when the last lid-closed request could not be applied, with the
+    /// specific reason, so the menu can name the cause honestly. `None`
+    /// when the last request succeeded or was never made.
+    pub lid_closed_block: Option<LidBlock>,
     /// What happens if the lid closes now (external display / power).
     /// Sandbox-safe and shown in every build; filled in by the
     /// composition root, so `view` defaults it to `Hidden`.
@@ -75,7 +106,7 @@ impl KeepAwake {
             deadline: None,
             allow_display_sleep: false,
             lid_closed: false,
-            lid_closed_blocked: false,
+            lid_closed_block: None,
         }
     }
 
@@ -120,16 +151,20 @@ impl KeepAwake {
     pub fn start(&mut self, duration: Option<Duration>) {
         self.end();
         self.deadline = duration.map(|d| Instant::now() + d);
-        self.backend =
-            platform::Backend::engage(duration, self.allow_display_sleep, self.lid_closed);
-        if self.backend.is_none() {
-            // Engaging the OS lock failed; don't pretend we're awake.
-            self.deadline = None;
-            // If this was a lid-closed request, the failure is the system
-            // refusing the `disablesleep` change (or a declined prompt), not
-            // a plain assertion failure. Remember it so the menu can be
-            // honest rather than showing an enabled session that isn't real.
-            self.lid_closed_blocked = self.lid_closed;
+        match platform::Backend::engage(duration, self.allow_display_sleep, self.lid_closed) {
+            Ok(backend) => self.backend = Some(backend),
+            Err(err) => {
+                // Engaging the OS lock failed; don't pretend we're awake.
+                self.deadline = None;
+                // Only a lid-closed failure carries a user-facing reason; a
+                // bare assertion failure leaves the block unset so the menu
+                // falls back to the plain clamshell outlook instead of
+                // claiming a lid-closed problem that didn't happen.
+                self.lid_closed_block = match err {
+                    EngageErr::Lid(reason) => Some(reason),
+                    EngageErr::Assertion => None,
+                };
+            }
         }
     }
 
@@ -138,7 +173,7 @@ impl KeepAwake {
         // Dropping the backend releases the OS wake lock.
         self.backend = None;
         self.deadline = None;
-        self.lid_closed_blocked = false;
+        self.lid_closed_block = None;
     }
 
     /// Reap a session whose timer elapsed (or whose helper process
@@ -196,7 +231,7 @@ impl KeepAwake {
             allow_display_sleep: self.allow_display_sleep,
             lid_closed: self.lid_closed,
             lid_closed_supported: platform::LID_CLOSED_SUPPORTED,
-            lid_closed_blocked: self.lid_closed_blocked,
+            lid_closed_block: self.lid_closed_block,
             // Filled in by the composition root, which owns helper state.
             helper_active: false,
             helper_needs_approval: false,
@@ -248,7 +283,7 @@ fn fmt_remaining(d: Duration) -> String {
 /// which is exactly why it is unavailable under the sandbox.
 #[cfg(target_os = "macos")]
 mod platform {
-    use super::Duration;
+    use super::{Duration, EngageErr, LidBlock};
     use std::ffi::c_void;
 
     /// A live keep-awake lock: the IOKit assertion, plus whether this
@@ -307,31 +342,61 @@ mod platform {
     /// Flip the system-wide `disablesleep` power flag. Runs `pmset` as
     /// root, the only lever that keeps the machine awake when the lid is
     /// physically closed (a lid close is an explicit sleep request that no
-    /// power assertion overrides). Returns whether the change applied.
+    /// power assertion overrides).
     ///
     /// Prefers the installed root helper (Option B): when it is registered,
     /// approved, and listening, the toggle is passwordless. Otherwise falls
     /// back to a one-off admin prompt (Option A), so the feature still
     /// works before, or without ever, setting the helper up.
-    fn set_disablesleep(on: bool) -> bool {
+    ///
+    /// Returns `Ok(())` only once the system genuinely reflects the change,
+    /// or a specific `LidBlock` explaining why it did not.
+    fn set_disablesleep(on: bool) -> Result<(), LidBlock> {
         // Attempt the change: the passwordless helper first (when present),
-        // else the admin prompt.
+        // else the admin prompt. `prompt` records how the admin path went so
+        // a verification failure can be attributed correctly; the helper
+        // path leaves it at `Ok` (it either applied or the verify below
+        // catches it as a refusal).
+        #[allow(unused_assignments)]
+        let mut prompt = PromptResult::Ok;
         #[cfg(not(feature = "mas"))]
         {
             if !crate::helper::set_disablesleep(on) {
-                set_disablesleep_prompt(on);
+                prompt = set_disablesleep_prompt(on);
             }
         }
         #[cfg(feature = "mas")]
         {
-            set_disablesleep_prompt(on);
+            prompt = set_disablesleep_prompt(on);
         }
-        // Trust the real system state, not the exit code. A managed Mac can
-        // accept the admin auth (or restrict `osascript`'s privileged exec)
-        // so that `pmset` reports success yet `disablesleep` never actually
-        // changes. Report success only if the flag really flipped, so the
-        // caller never claims a lid-closed session that isn't in effect.
-        sleep_currently_disabled() == on
+        // Trust the real system state, not the exit code, but give it a
+        // moment: `pmset` hands the change to `powerd`, which applies it
+        // asynchronously, so an immediate read can still return the old
+        // value and look like a refusal that never happened. Poll briefly
+        // for the flag to actually flip before deciding.
+        if wait_for_sleep_disabled(on) {
+            return Ok(());
+        }
+        // It never took. Name why: the user cancelled the prompt, the
+        // mechanism could not run at all, or the system silently overrode
+        // the change (a managed Mac's power policy).
+        Err(match prompt {
+            PromptResult::Declined => LidBlock::Declined,
+            PromptResult::Unavailable => LidBlock::Unavailable,
+            PromptResult::Ok => LidBlock::Refused,
+        })
+    }
+
+    /// How the admin-prompt attempt resolved, so the caller can tell a user
+    /// cancellation apart from a mechanism failure or a silent refusal.
+    #[derive(Copy, Clone, PartialEq, Eq)]
+    enum PromptResult {
+        /// The command ran to completion (exit 0), or was not attempted.
+        Ok,
+        /// The user cancelled the admin-authentication dialog.
+        Declined,
+        /// `osascript`/`pmset` could not be run at all.
+        Unavailable,
     }
 
     /// Option A path: flip the flag through the standard macOS
@@ -339,7 +404,7 @@ mod platform {
     /// privileges` shows the OS's own password prompt: the user
     /// authenticates to the system, not to klipa, and we never see or
     /// handle the password.
-    fn set_disablesleep_prompt(on: bool) -> bool {
+    fn set_disablesleep_prompt(on: bool) -> PromptResult {
         let val = if on { "1" } else { "0" };
         // `-a`: apply on both battery and charger, so the feature is not
         // silently a no-op on battery. Heat/battery cost is surfaced in
@@ -351,14 +416,40 @@ mod platform {
         match std::process::Command::new("/usr/bin/osascript")
             .arg("-e")
             .arg(&script)
-            .status()
+            .output()
         {
-            Ok(status) => status.success(),
+            Ok(out) if out.status.success() => PromptResult::Ok,
+            Ok(out) => {
+                // A cancelled dialog surfaces as AppleScript error -128
+                // ("User canceled"); anything else is a genuine failure to
+                // run the change.
+                let stderr = String::from_utf8_lossy(&out.stderr);
+                if stderr.contains("-128") || stderr.contains("User canceled") {
+                    PromptResult::Declined
+                } else {
+                    tracing::warn!(%stderr, "pmset via osascript failed");
+                    PromptResult::Unavailable
+                }
+            }
             Err(e) => {
                 tracing::warn!(?e, "pmset via osascript failed");
-                false
+                PromptResult::Unavailable
             }
         }
+    }
+
+    /// Poll `SleepDisabled` for up to ~2s, returning as soon as it matches
+    /// `want`. `powerd` applies `disablesleep` asynchronously, so a single
+    /// read right after `pmset` returns can race the commit; this closes
+    /// that window without blocking for long when the change did apply.
+    fn wait_for_sleep_disabled(want: bool) -> bool {
+        for _ in 0..20 {
+            if sleep_currently_disabled() == want {
+                return true;
+            }
+            std::thread::sleep(Duration::from_millis(100));
+        }
+        sleep_currently_disabled() == want
     }
 
     /// Read (no privileges needed) whether the system currently has sleep
@@ -405,7 +496,7 @@ mod platform {
         }
         if sleep_currently_disabled() {
             tracing::warn!("system sleep left disabled after unclean exit; restoring");
-            set_disablesleep(false);
+            let _ = set_disablesleep(false);
         }
         set_marker(false);
     }
@@ -415,7 +506,7 @@ mod platform {
             _duration: Option<Duration>,
             allow_display_sleep: bool,
             lid_closed: bool,
-        ) -> Option<Self> {
+        ) -> Result<Self, EngageErr> {
             let lid = lid_closed && LID_CLOSED_SUPPORTED;
             // With the lid shut the panel is off anyway, so a lid-closed
             // session always lets the display sleep. Otherwise:
@@ -439,7 +530,7 @@ mod platform {
                         CFRelease(name_str);
                     }
                 }
-                return None;
+                return Err(EngageErr::Assertion);
             }
             let mut id: u32 = 0;
             // SAFETY: both CFStrings are valid; `id` is a valid out-pointer.
@@ -454,28 +545,32 @@ mod platform {
             }
             if rc != IO_SUCCESS {
                 tracing::warn!(rc, "IOPMAssertionCreateWithName failed");
-                return None;
+                return Err(EngageErr::Assertion);
             }
 
             // Lid-closed mode: set the root power flag. If the user
             // cancels the admin prompt (or it fails), don't start a
             // half-on session that only survives an open lid, release the
-            // assertion and report failure so the UI stays honest.
+            // assertion and report the specific reason so the UI stays
+            // honest.
             let mut disabled_sleep = false;
             if lid {
-                if set_disablesleep(true) {
-                    set_marker(true);
-                    disabled_sleep = true;
-                } else {
-                    // SAFETY: releasing the assertion we just created.
-                    unsafe {
-                        IOPMAssertionRelease(id);
+                match set_disablesleep(true) {
+                    Ok(()) => {
+                        set_marker(true);
+                        disabled_sleep = true;
                     }
-                    return None;
+                    Err(reason) => {
+                        // SAFETY: releasing the assertion we just created.
+                        unsafe {
+                            IOPMAssertionRelease(id);
+                        }
+                        return Err(EngageErr::Lid(reason));
+                    }
                 }
             }
 
-            Some(Self {
+            Ok(Self {
                 assertion: id,
                 disabled_sleep,
             })
@@ -498,7 +593,7 @@ mod platform {
             // quitting so the prompt lands while the app is still alive,
             // and the on-disk marker covers any exit that skips this.
             if self.disabled_sleep {
-                set_disablesleep(false);
+                let _ = set_disablesleep(false);
                 set_marker(false);
             }
         }
@@ -514,7 +609,7 @@ mod platform {
 /// inhibitor blocks the whole idle path (screen blank + auto-suspend).
 #[cfg(all(unix, not(target_os = "macos")))]
 mod platform {
-    use super::Duration;
+    use super::{Duration, EngageErr};
     use std::process::{Child, Command, Stdio};
 
     pub struct Backend(Child);
@@ -532,7 +627,7 @@ mod platform {
             duration: Option<Duration>,
             _allow_display_sleep: bool,
             _lid_closed: bool,
-        ) -> Option<Self> {
+        ) -> Result<Self, EngageErr> {
             let sleep_arg = match duration {
                 Some(d) => d.as_secs().max(1).to_string(),
                 None => "infinity".to_string(),
@@ -548,10 +643,10 @@ mod platform {
                 .stdout(Stdio::null())
                 .stderr(Stdio::null());
             match cmd.spawn() {
-                Ok(child) => Some(Self(child)),
+                Ok(child) => Ok(Self(child)),
                 Err(e) => {
                     tracing::warn!(?e, "failed to start systemd-inhibit (is systemd present?)");
-                    None
+                    Err(EngageErr::Assertion)
                 }
             }
         }
@@ -576,7 +671,7 @@ mod platform {
 /// sessions are ended by `KeepAwake::poll` via the deadline.
 #[cfg(target_os = "windows")]
 mod platform {
-    use super::Duration;
+    use super::{Duration, EngageErr};
 
     const ES_CONTINUOUS: u32 = 0x8000_0000;
     const ES_SYSTEM_REQUIRED: u32 = 0x0000_0001;
@@ -600,7 +695,7 @@ mod platform {
             _duration: Option<Duration>,
             allow_display_sleep: bool,
             _lid_closed: bool,
-        ) -> Option<Self> {
+        ) -> Result<Self, EngageErr> {
             let mut flags = ES_CONTINUOUS | ES_SYSTEM_REQUIRED;
             if !allow_display_sleep {
                 flags |= ES_DISPLAY_REQUIRED;
@@ -610,9 +705,9 @@ mod platform {
             let previous = unsafe { SetThreadExecutionState(flags) };
             if previous == 0 {
                 tracing::warn!("SetThreadExecutionState failed");
-                return None;
+                return Err(EngageErr::Assertion);
             }
-            Some(Self)
+            Ok(Self)
         }
 
         pub fn finished(&mut self) -> bool {
@@ -635,7 +730,7 @@ mod platform {
 /// assertion. The timer still works via the deadline.
 #[cfg(not(any(unix, windows)))]
 mod platform {
-    use super::Duration;
+    use super::{Duration, EngageErr};
 
     pub struct Backend;
 
@@ -650,9 +745,9 @@ mod platform {
             _duration: Option<Duration>,
             _allow_display_sleep: bool,
             _lid_closed: bool,
-        ) -> Option<Self> {
+        ) -> Result<Self, EngageErr> {
             tracing::info!("keep-awake is not enforced on this platform");
-            Some(Self)
+            Ok(Self)
         }
 
         pub fn finished(&mut self) -> bool {

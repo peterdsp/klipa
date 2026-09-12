@@ -5,7 +5,7 @@
 //! to the clipboard. No window, no GPU, no renderer - hence tiny.
 
 use crate::adapters::clipboard::{decode_png, read_image_png};
-use crate::awake::AwakeView;
+use crate::awake::{AwakeView, LidBlock};
 use crate::clamshell::ClamshellStatus;
 use crate::license::Gate;
 use crate::settings::MenubarDisplay;
@@ -322,11 +322,14 @@ fn build_awake_submenu(awake: &AwakeView) -> Submenu {
     // holding the Mac awake through a lid close (direct build), that
     // overrides the OS default; otherwise report what macOS does on its
     // own so the user knows whether closing the lid will keep working.
-    let lid_line = if awake.lid_closed_blocked {
-        // The user asked for lid-closed but the system refused the change
-        // (policy on a managed Mac) or the admin prompt was declined. Say so
-        // plainly rather than showing an enabled session that isn't real.
-        Some("Lid closed: couldn't enable (blocked or declined)")
+    let lid_line = if let Some(reason) = awake.lid_closed_block {
+        // The user asked for lid-closed but it did not engage. Name the
+        // actual cause rather than a vague catch-all, so the fix is obvious.
+        Some(match reason {
+            LidBlock::Declined => "Lid closed: admin password was cancelled",
+            LidBlock::Refused => "Lid closed: system blocked it (managed power policy)",
+            LidBlock::Unavailable => "Lid closed: couldn't run the change",
+        })
     } else if awake.active && awake.lid_closed && awake.lid_closed_supported {
         Some("Lid closed: kept awake by klipa")
     } else {
