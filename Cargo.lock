@@ -1236,7 +1236,7 @@ dependencies = [
 
 [[package]]
 name = "klipa-core"
-version = "0.5.2"
+version = "0.5.3"
 dependencies = [
  "async-lock",
  "async-trait",
@@ -1251,11 +1251,11 @@ dependencies = [
 
 [[package]]
 name = "klipa-helper"
-version = "0.5.2"
+version = "0.5.3"
 
 [[package]]
 name = "klipa-ui"
-version = "0.5.2"
+version = "0.5.3"
 dependencies = [
  "active-win-pos-rs",
  "arboard",
