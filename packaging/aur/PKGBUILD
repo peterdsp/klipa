@@ -4,7 +4,7 @@
 # pkgver + sha256sums are refreshed by scripts/update-package-managers.sh.
 pkgname=klipa-bin
 _pkgname=klipa
-pkgver=0.5.3
+pkgver=0.5.4
 pkgrel=1
 pkgdesc="Small, fast, menubar clipboard manager with keep-awake"
 arch=('x86_64')
@@ -14,7 +14,7 @@ provides=('klipa')
 conflicts=('klipa')
 depends=('gtk3' 'libxdo' 'libayatana-appindicator')
 source=("$_pkgname-$pkgver.tar.gz::https://github.com/peterdsp/klipa/releases/download/v$pkgver/klipa-$pkgver-linux-x86_64.tar.gz")
-sha256sums=('dc6b0ae810e96038f4e7b0b65e6d6c63861719e6c695d991a901fae113c9560d')
+sha256sums=('50d3bf42a58ba97c324bb5095ade4c3aeb579fe32d6e000ab94ae5662412d6fc')
 
 package() {
   cd "$srcdir/$_pkgname"
