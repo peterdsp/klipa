@@ -15,7 +15,7 @@ cask "klipa" do
   desc "Small, fast, menubar clipboard manager with keep-awake"
   homepage "https://klipa.peterdsp.dev"
 
-  depends_on macos: ">= :big_sur"
+  depends_on macos: :big_sur
 
   pkg "klipa-#{version}-macos.pkg"
 
