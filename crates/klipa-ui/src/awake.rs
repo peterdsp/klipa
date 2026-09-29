@@ -118,11 +118,16 @@ impl KeepAwake {
         self.lid_closed
     }
 
-    /// Flip the lid-closed preference. Restarts an active session so the
-    /// new mode takes effect immediately: turning it on prompts for an
-    /// admin password (the OS sets the `disablesleep` flag), turning it
-    /// off prompts once more to restore normal sleep. A no-op where the
-    /// feature is unsupported.
+    /// Flip the lid-closed preference and make it take effect immediately.
+    ///
+    /// This is a switch, not just a modifier: turning it ON with no session
+    /// running starts an indefinite keep-awake session (so the toggle by
+    /// itself keeps the Mac awake, lid shut, which is what people expect),
+    /// and turning it ON during a session restarts it in lid-closed mode.
+    /// Either way the OS sets the `disablesleep` flag (one admin prompt,
+    /// or silent with the passwordless helper). Turning it OFF during a
+    /// session restarts that session in normal mode, restoring sleep. A
+    /// no-op where the feature is unsupported.
     pub fn set_lid_closed(&mut self, on: bool) {
         if !platform::LID_CLOSED_SUPPORTED || self.lid_closed == on {
             return;
@@ -131,6 +136,11 @@ impl KeepAwake {
         if self.is_active() {
             let remaining = self.remaining();
             self.start(remaining);
+        } else if on {
+            // No session yet: start an indefinite one so checking the box
+            // actually engages keep-awake instead of silently arming a
+            // preference that only matters once a duration is picked.
+            self.start(None);
         }
     }
 
