@@ -1,10 +1,100 @@
-# Keep awake with the lid closed
+# Keep awake: modes, indefinite sessions, and the lid
 
-How klipa keeps a Mac running with the lid physically shut, why it works
-the way it does, and the safety rules around it. This documents the
-feature implemented in [`crates/klipa-ui/src/awake.rs`](../crates/klipa-ui/src/awake.rs).
+How klipa keeps a machine running, what "indefinitely" actually means
+here, and why closing a MacBook lid is a different problem from every
+other kind of sleep. This documents the feature implemented in
+[`crates/klipa-ui/src/awake.rs`](../crates/klipa-ui/src/awake.rs).
 
-## The core problem
+## The three modes
+
+Keeping a Mac awake is not one behavior, it is three, and conflating them
+is how apps end up burning a display for a download. `AwakeMode` makes
+them exclusive and names each one:
+
+| Mode | Intent | macOS assertion type | Windows flags |
+|---|---|---|---|
+| `ScreenAndSystem` | keep the screen lit and the machine awake | `kIOPMAssertionTypePreventUserIdleDisplaySleep` | `ES_SYSTEM_REQUIRED \| ES_DISPLAY_REQUIRED` |
+| `SystemOnly` | keep the machine awake, let the screen turn off | `kIOPMAssertionTypePreventUserIdleSystemSleep` | `ES_SYSTEM_REQUIRED` |
+| `LidClosed` | keep running with the lid physically shut | `...PreventUserIdleSystemSleep` **plus** the system `disablesleep` flag | n/a |
+
+Two rules fall out of this table:
+
+- **One assertion per mode, never a blend.** `PreventUserIdleDisplaySleep`
+  already implies the system stays awake, so `ScreenAndSystem` does *not*
+  also take a system assertion; that would be a second assertion id to
+  track for no extra behavior.
+- **`LidClosed` lets the display sleep on purpose.** The panel is off
+  behind a shut lid, so holding a display assertion there would only cost
+  power in a machine that already cannot shed heat.
+
+On Linux `systemd-inhibit --what=idle` blocks the entire idle path
+(screen blank and auto-suspend together), so the first two modes are
+indistinguishable there and `LidClosed` is not offered at all.
+
+## "Indefinitely" means no timer
+
+`AwakeDuration` has exactly two cases:
+
+```rust
+pub enum AwakeDuration {
+    Indefinite,        // no duration inside it at all
+    For(Duration),
+}
+```
+
+`Indefinite` is deliberately not `For(some enormous duration)`. There is
+no `Duration::MAX`, no hundred years, no `u64::MAX` seconds, and no timer
+standing in for forever. The only place a deadline is ever computed is
+`AwakeDuration::deadline`, which returns `None` for `Indefinite`, so an
+indefinite session stores no deadline and `KeepAwake::poll` has nothing
+to compare against. It ends when:
+
+- the user picks **End current session**, or switches to a timed one,
+- klipa quits (the assertion is released on the way out),
+- the machine shuts down or restarts,
+- or macOS invalidates the assertion.
+
+The menu reflects that: an indefinite session reads `Awake indefinitely`
+with no countdown, and `main.rs` skips the once-a-minute label refresh
+for it entirely, because there is nothing to refresh. The custom-length
+prompt caps its input at one year precisely so it can never become a back
+door to a fake-infinite timer; asking for no limit is the `Indefinitely`
+item's job.
+
+## One assertion, one owner
+
+`KeepAwake` holds at most one `Box<dyn WakeLock>`. That box *is* the
+assertion: creating it is the only way to acquire one, dropping it is the
+only way to release one, and there is exactly one slot for it. So:
+
+- starting a session while one runs calls `end()` first, which drops the
+  old lock and releases the old assertion before the new one is requested,
+- a failed start leaves no session, no deadline, and no lock, and records
+  the reason for the menu,
+- quitting, expiring, and switching modes all funnel through the same
+  drop.
+
+Duplicate assertions and orphaned assertion ids are therefore not
+representable rather than merely avoided. Every IOKit return code is
+checked (`IOPMAssertionCreateWithName` and `IOPMAssertionRelease` both),
+nothing is force-unwrapped, and a failure is logged and surfaced.
+
+`PowerSource` is the single seam onto the OS power APIs, which is what
+lets the session rules above be tested against a recording fake instead
+of a real Mac's power state. See the tests at the bottom of `awake.rs`.
+
+## Preferences persist, sessions do not
+
+`settings.json` stores the selected `awake_mode` and the last custom
+length. It does **not** store "a session was running". A power assertion
+belongs to the process that created it and dies with it, so reconstructing
+one at launch from a saved flag would be inventing a session the user
+never started, and on the lid-closed path it would silently re-acquire
+root. On relaunch klipa restores the preference and waits. (A saved
+`LidClosed` preference loaded by a build that cannot honor it falls back
+to the default rather than showing an inert selection.)
+
+## The core problem with the lid
 
 klipa's normal keep-awake holds an IOKit power assertion
 (`IOPMAssertionCreateWithName`), the same public API that `caffeinate`
@@ -13,12 +103,36 @@ that fires when nobody touches the machine.
 
 Closing the lid is a different thing. It is not an idle timeout, it is an
 **explicit** sleep request, and macOS honors it regardless of any power
-assertion. This is why `caffeinate`, KeepingYouAwake, and klipa's plain
+assertion. This is why `caffeinate`, `ProcessInfo.beginActivity`,
+`PreventUserIdleSystemSleep`, KeepingYouAwake, and klipa's plain
 keep-awake all hold a Mac awake on an open desk but let it drop the
 moment you fold it shut.
 
-The only native lever that changes lid-close behavior is the system power
-setting `disablesleep`:
+**Verified conclusion: no public, non-privileged API overrides the lid
+switch, on Intel or Apple Silicon, on any current macOS.** The behavior
+that *is* supported and documented is Apple's clamshell mode, and it
+depends on the hardware and power situation:
+
+| Configuration | Lid closed, no privileged change | Notes |
+|---|---|---|
+| MacBook, no external display | **sleeps** | on AC or battery, Intel or Apple Silicon; an assertion does not change this |
+| MacBook + external display, Apple Silicon | **keeps running** | clamshell works on battery too |
+| MacBook + external display, Intel, on AC | **keeps running** | Apple's documented clamshell requirement |
+| MacBook + external display, Intel, on battery | **sleeps** | connect power to get clamshell |
+| Desktop Mac | n/a | no lid to reason about |
+
+Historically Apple's clamshell instructions also mentioned an external
+keyboard or mouse; on current macOS an attached external display and
+power are what the behavior actually tracks, which is why klipa detects
+exactly those two and does not claim anything about input devices.
+
+klipa encodes this table in
+[`clamshell.rs`](../crates/klipa-ui/src/clamshell.rs) and shows the result
+as one line in the Keep-awake submenu, in **every** build. That is the
+honest answer to "will closing the lid work for me right now?".
+
+The only native lever that changes lid-close behavior beyond that is the
+system power setting `disablesleep`:
 
 ```bash
 sudo pmset -a disablesleep 1   # stop sleeping, even with the lid closed
@@ -28,7 +142,9 @@ sudo pmset -a disablesleep 0   # restore normal behavior
 Every third-party app that genuinely keeps a Mac awake with the lid
 closed (Amphetamine, KeepAwake, AwakeToggle, InsomniaX) reaches this same
 setting underneath. It works on Intel and Apple Silicon in practice, is
-undocumented, and requires root.
+undocumented, and **requires root**. It is a real privilege escalation,
+not a trick, which is why klipa puts it behind the OS's own admin
+authentication and offers it only where the sandbox permits it.
 
 ## Why this is direct-download only
 
@@ -134,16 +250,29 @@ natural future step if that residual risk ever matters.
 1. Open the tray, `Settings -> Keep awake`.
 2. (Optional, recommended) click **"Enable passwordless mode (one-time
    setup)"**, then approve klipa in System Settings > Login Items. After
-   this, lid-closed toggles never prompt again.
-3. Check **"Stay awake with lid closed (runs hot)"**. This only stores the
-   preference, no prompt yet.
-4. Pick a duration (or "Indefinitely"). If passwordless mode is on the Mac
-   silently starts staying awake with the lid shut; otherwise macOS shows
-   its admin prompt once.
-5. The session status reads e.g. `Awake - 1h30m left - lid closed`.
+   this, lid-closed sessions never prompt again.
+3. Pick the mode **"Keep running with lid closed (runs hot)"**. Since
+   0.5.4 this is a one-tap switch: with no session running it starts an
+   indefinite one straight away, and during a session it moves that
+   session over, keeping a timed one's remaining time and an indefinite
+   one indefinite. If passwordless mode is on the Mac silently starts
+   staying awake with the lid shut; otherwise macOS shows its admin
+   prompt once.
+4. Pick a different duration at any point, including **Indefinitely** or
+   **Custom...**.
+5. The submenu reads, on its own lines:
 
-Toggling the checkbox while a session is already running restarts the
-session so the new mode takes effect immediately.
+   ```
+   Awake indefinitely
+   System awake - lid closed, display off
+   Lid closed: kept awake by klipa
+   ```
+
+   or, for a timed session, `Awake for 1h30m` on the first line.
+
+If the admin prompt is cancelled, or a managed Mac's power policy
+overrides the change, no session starts at all and the menu names the
+reason instead of showing a mode that would die the moment the lid shut.
 
 ## Safety and correctness
 
@@ -157,8 +286,8 @@ feature is built with that firmly in mind:
   app quitting, crashing, or the machine rebooting. If klipa set it and
   never cleared it, the Mac would never sleep again. The revert path is
   therefore load-bearing, not a nicety, and is handled three ways:
-  1. **Normal end** (timer expiry, "End current session", unchecking the
-     box, or quitting klipa): `Drop` on the backend runs
+  1. **Normal end** (timer expiry, "End current session", switching to
+     another mode, or quitting klipa): `Drop` on the lock runs
      `pmset disablesleep 0` (silently via the helper, or via one admin
      prompt in Option A).
   2. **Clean quit:** the Quit handler ends the session *before* exiting
@@ -177,6 +306,9 @@ feature is built with that firmly in mind:
 - **Display is allowed to sleep.** With the lid closed the panel is off
   anyway, so a lid-closed session uses `PreventUserIdleSystemSleep` and
   lets the display power down.
+- **No session is resurrected at launch.** The mode is a persisted
+  preference; the session is not. klipa never re-acquires root on startup
+  because of something saved in `settings.json`.
 
 ## Known limitations
 
@@ -194,6 +326,10 @@ feature is built with that firmly in mind:
 - **Undocumented behavior.** `disablesleep` is not a documented API. A
   future macOS could change lid-close behavior. The idle-only keep-awake,
   which uses supported public API, remains the always-available baseline.
+- **"Custom..." is macOS-only.** It is an `NSAlert`, the one modal a
+  windowless tray app can raise natively. Windows and Linux would need a
+  GUI toolkit klipa does not carry, so the item is hidden there rather
+  than shown dead. The fixed presets and **Indefinitely** work everywhere.
 - **Power source.** klipa uses `pmset -a` (all sources) so the feature is
   not silently a no-op on battery. Running it on battery with the lid
   closed is exactly the highest-risk mode. Prefer a bounded session on
@@ -238,8 +374,10 @@ boundary.
 ## Files touched
 
 - [`crates/klipa-ui/src/awake.rs`](../crates/klipa-ui/src/awake.rs): the
-  lid-closed backend, the `pmset` toggle (helper-first, prompt fallback),
-  the marker, and `recover_lid_closed`.
+  `AwakeMode` / `AwakeDuration` domain, the `PowerSource` seam and its
+  per-OS backends, the session lifecycle, the `pmset` toggle
+  (helper-first, prompt fallback), the marker, `recover_lid_closed`, and
+  the unit tests.
 - [`crates/klipa-ui/src/helper.rs`](../crates/klipa-ui/src/helper.rs):
   app-side `SMAppService` register/status/unregister and the socket client.
 - [`crates/klipa-helper`](../crates/klipa-helper): the root daemon.
@@ -247,12 +385,18 @@ boundary.
   the LaunchDaemon plist bundled in the app.
 - [`crates/klipa-ui/src/clamshell.rs`](../crates/klipa-ui/src/clamshell.rs):
   sandbox-safe lid-close outlook detection (all builds, App Store included).
+- [`crates/klipa-ui/src/prompt.rs`](../crates/klipa-ui/src/prompt.rs): the
+  `NSAlert` prompt behind **Custom...**, plus its input validation.
+- [`crates/klipa-ui/src/settings.rs`](../crates/klipa-ui/src/settings.rs):
+  the persisted `awake_mode` / `awake_custom_minutes` preferences.
 - [`crates/klipa-ui/src/paths.rs`](../crates/klipa-ui/src/paths.rs): the
   `lid_awake_marker` sentinel path.
 - [`crates/klipa-ui/src/tray.rs`](../crates/klipa-ui/src/tray.rs): the
-  `AWAKE_LID_ID` toggle and the passwordless-helper menu items.
+  mode radio group, the duration presets, the status/detail lines and the
+  passwordless-helper menu items.
 - [`crates/klipa-ui/src/main.rs`](../crates/klipa-ui/src/main.rs): the menu
-  handlers, helper-state wiring, startup recovery, and revert-before-quit.
+  handlers, helper-state wiring, preference restore, startup recovery, and
+  revert-before-quit.
 - [`scripts/bundle-macos.sh`](../scripts/bundle-macos.sh) and
   [`scripts/package-macos.sh`](../scripts/package-macos.sh): build, embed,
   and sign the helper (direct build only).
@@ -266,8 +410,8 @@ Build, sign, and notarize the direct (non-`mas`) variant, install it to
    System Settings > Login Items, confirm the menu now shows "Passwordless
    mode: on" and `sudo launchctl print system/dev.peterdsp.klipa.helper`
    lists the daemon.
-2. Enable lid-closed, start a short (5 minute) session. With the helper on
-   there should be **no** password prompt.
+2. Pick the lid-closed mode, then a short (5 minute) session. With the
+   helper on there should be **no** password prompt.
 3. Confirm `pmset -g | grep SleepDisabled` shows `1`.
 4. Close the lid, confirm the machine keeps running (e.g. it still answers
    on the network, or an ongoing task keeps progressing).
@@ -279,5 +423,13 @@ Build, sign, and notarize the direct (non-`mas`) variant, install it to
    `recover_lid_closed()` restores `SleepDisabled` to `0` (silently with
    the helper on).
 8. Build with `--no-default-features --features mas` and confirm the
-   lid-closed toggle and helper items are absent, and the bundle contains
-   no `klipa-helper` or LaunchDaemon plist.
+   lid-closed mode and helper items are absent, the clamshell outlook line
+   is still shown, and the bundle contains no `klipa-helper` or
+   LaunchDaemon plist.
+9. Indefinite: pick **Indefinitely**, confirm the menu reads
+   `Awake indefinitely` with no countdown and `pmset -g assertions` lists
+   one klipa assertion. Leave it running, then **End current session** and
+   confirm the assertion disappears immediately.
+10. Modes: switch between **Keep screen & Mac awake** and **Keep Mac
+    awake, allow screen off** and confirm `pmset -g assertions` shows
+    exactly one klipa assertion at a time, of the matching type, never two.

@@ -5,7 +5,7 @@
 //! to the clipboard. No window, no GPU, no renderer - hence tiny.
 
 use crate::adapters::clipboard::{decode_png, read_image_png};
-use crate::awake::{AwakeView, LidBlock};
+use crate::awake::{AwakeDuration, AwakeMode, AwakeView, EngageErr, LidBlock};
 use crate::clamshell::ClamshellStatus;
 use crate::license::Gate;
 use crate::settings::MenubarDisplay;
@@ -28,9 +28,14 @@ pub const CLEAR_ID: &str = "__klipa_clear";
 pub const QUIT_ID: &str = "__klipa_quit";
 /// Keep-awake actions.
 pub const AWAKE_END_ID: &str = "__klipa_awake_end";
-pub const AWAKE_DISPLAY_ID: &str = "__klipa_awake_display";
-/// Toggle "keep awake with the lid closed" (macOS non-App-Store only).
-pub const AWAKE_LID_ID: &str = "__klipa_awake_lid";
+/// The three keep-awake modes. Exactly one is in effect at a time, so
+/// these read as a radio group rather than a pile of independent flags.
+pub const AWAKE_MODE_SCREEN_ID: &str = "__klipa_awake_mode_screen";
+pub const AWAKE_MODE_SYSTEM_ID: &str = "__klipa_awake_mode_system";
+/// "Keep running with lid closed" (macOS non-App-Store only).
+pub const AWAKE_MODE_LID_ID: &str = "__klipa_awake_mode_lid";
+/// Ask for a custom session length (macOS only; see `prompt.rs`).
+pub const AWAKE_CUSTOM_ID: &str = "__klipa_awake_custom";
 /// Install / approve the passwordless root helper (Option B).
 pub const HELPER_INSTALL_ID: &str = "__klipa_helper_install";
 /// Remove the passwordless root helper.
@@ -60,22 +65,36 @@ pub fn parse_show_count(id: &str) -> Option<usize> {
 pub const UPDATE_ID: &str = "__klipa_update";
 
 /// Keep-awake session presets shown in the submenu: (label, duration).
-/// `None` is an indefinite session.
-const AWAKE_PRESETS: &[(&str, Option<Duration>)] = &[
-    ("Indefinitely", None),
-    ("5 minutes", Some(Duration::from_secs(5 * 60))),
-    ("15 minutes", Some(Duration::from_secs(15 * 60))),
-    ("30 minutes", Some(Duration::from_secs(30 * 60))),
-    ("1 hour", Some(Duration::from_secs(60 * 60))),
-    ("2 hours", Some(Duration::from_secs(2 * 60 * 60))),
-    ("5 hours", Some(Duration::from_secs(5 * 60 * 60))),
+const AWAKE_PRESETS: &[(&str, AwakeDuration)] = &[
+    ("Indefinitely", AwakeDuration::Indefinite),
+    ("5 minutes", AwakeDuration::For(Duration::from_secs(5 * 60))),
+    ("15 minutes", AwakeDuration::For(Duration::from_secs(15 * 60))),
+    ("30 minutes", AwakeDuration::For(Duration::from_secs(30 * 60))),
+    ("1 hour", AwakeDuration::For(Duration::from_secs(60 * 60))),
+    ("2 hours", AwakeDuration::For(Duration::from_secs(2 * 60 * 60))),
+    ("5 hours", AwakeDuration::For(Duration::from_secs(5 * 60 * 60))),
 ];
 
-/// Parse the seconds payload of an `AWAKE_START_PREFIX` menu id into a
-/// session duration (`None` == indefinitely).
-pub fn parse_awake_start(id: &str) -> Option<Option<Duration>> {
+/// Menu id for starting a session of this length. Indefinite is carried
+/// as `0` seconds, which `parse_awake_start` maps straight back to
+/// `AwakeDuration::Indefinite` - the wire form never stands in for a
+/// duration, it is just a tag.
+fn awake_start_id(duration: AwakeDuration) -> String {
+    let secs = match duration {
+        AwakeDuration::Indefinite => 0,
+        AwakeDuration::For(d) => d.as_secs().max(1),
+    };
+    format!("{AWAKE_START_PREFIX}{secs}")
+}
+
+/// Parse the payload of an `AWAKE_START_PREFIX` menu id back into a
+/// session duration.
+pub fn parse_awake_start(id: &str) -> Option<AwakeDuration> {
     let secs: u64 = id.strip_prefix(AWAKE_START_PREFIX)?.parse().ok()?;
-    Some((secs > 0).then(|| Duration::from_secs(secs)))
+    Some(match secs {
+        0 => AwakeDuration::Indefinite,
+        n => AwakeDuration::For(Duration::from_secs(n)),
+    })
 }
 
 /// Hard ceiling on dropdown entries regardless of the user's setting.
@@ -307,69 +326,118 @@ fn clamshell_label(status: ClamshellStatus) -> Option<&'static str> {
     }
 }
 
-/// Build the "Keep awake" submenu: a status line when active, the
-/// duration presets, the display-sleep toggle, and an end action.
+/// The honest line about what closing the lid does right now.
+///
+/// Priority: a failure the user needs to see, then klipa's own override
+/// while it is genuinely holding the machine awake through a lid close,
+/// then the plain OS outlook read from the hardware.
+fn lid_line(awake: &AwakeView) -> Option<&'static str> {
+    match awake.error {
+        // The user asked for lid-closed and it did not engage. Name the
+        // actual cause rather than a vague catch-all, so the fix is obvious.
+        Some(EngageErr::Lid(LidBlock::Declined)) => {
+            Some("Lid closed: admin password was cancelled")
+        }
+        Some(EngageErr::Lid(LidBlock::Refused)) => {
+            Some("Lid closed: system blocked it (managed power policy)")
+        }
+        Some(EngageErr::Lid(LidBlock::Unavailable)) => {
+            Some("Lid closed: couldn't run the change")
+        }
+        // A plain wake-lock failure says nothing about the lid; the
+        // status line above already reports it.
+        Some(EngageErr::Assertion) => clamshell_label(awake.clamshell),
+        None if awake.active && awake.mode == AwakeMode::LidClosed => {
+            Some("Lid closed: kept awake by klipa")
+        }
+        None => clamshell_label(awake.clamshell),
+    }
+}
+
+/// Build the "Keep awake" submenu: the live status, the three modes, the
+/// duration presets, the lid-close outlook, and an end action.
 fn build_awake_submenu(awake: &AwakeView) -> Submenu {
     let title = if awake.active { "Keep awake \u{25cf}" } else { "Keep awake" };
     let sub = Submenu::new(title, true);
 
-    if let Some(status) = &awake.status {
-        let _ = sub.append(&MenuItem::new(status, false, None));
-        let _ = sub.append(&PredefinedMenuItem::separator());
+    // Runtime state first, always: "Inactive", "Awake indefinitely", or
+    // "Awake for 43m". Never a countdown for an indefinite session,
+    // because there is nothing to count down to.
+    let _ = sub.append(&MenuItem::new(&awake.status, false, None));
+    if let Some(detail) = &awake.detail {
+        let _ = sub.append(&MenuItem::new(detail, false, None));
     }
+    // A start that the OS refused must never look like a running session.
+    if awake.error == Some(EngageErr::Assertion) {
+        let _ = sub.append(&MenuItem::new(
+            "Couldn't hold the wake lock - the system refused it",
+            false,
+            None,
+        ));
+    }
+    let _ = sub.append(&PredefinedMenuItem::separator());
 
     // Honest lid-close outlook (macOS laptops). If klipa is actively
     // holding the Mac awake through a lid close (direct build), that
     // overrides the OS default; otherwise report what macOS does on its
     // own so the user knows whether closing the lid will keep working.
-    let lid_line = if let Some(reason) = awake.lid_closed_block {
-        // The user asked for lid-closed but it did not engage. Name the
-        // actual cause rather than a vague catch-all, so the fix is obvious.
-        Some(match reason {
-            LidBlock::Declined => "Lid closed: admin password was cancelled",
-            LidBlock::Refused => "Lid closed: system blocked it (managed power policy)",
-            LidBlock::Unavailable => "Lid closed: couldn't run the change",
-        })
-    } else if awake.active && awake.lid_closed && awake.lid_closed_supported {
-        Some("Lid closed: kept awake by klipa")
-    } else {
-        clamshell_label(awake.clamshell)
-    };
-    if let Some(line) = lid_line {
+    if let Some(line) = lid_line(awake) {
         let _ = sub.append(&MenuItem::new(line, false, None));
         let _ = sub.append(&PredefinedMenuItem::separator());
     }
 
-    for (label, dur) in AWAKE_PRESETS {
-        let secs = dur.map(|d| d.as_secs()).unwrap_or(0);
-        let id = format!("{AWAKE_START_PREFIX}{secs}");
-        let _ = sub.append(&MenuItem::with_id(id, *label, true, None));
-    }
-
-    let _ = sub.append(&PredefinedMenuItem::separator());
-    let _ = sub.append(&CheckMenuItem::with_id(
-        AWAKE_DISPLAY_ID,
-        "Allow display sleep",
-        true,
-        awake.allow_display_sleep,
-        None,
-    ));
-    // Lid-closed keep-awake only exists where the OS lets us set it (the
-    // non-App-Store macOS build); hide the toggle entirely elsewhere so it
-    // never shows a control that would do nothing. Toggling it prompts for
-    // an admin password, and the machine has no way to shed heat with the
-    // lid shut, so the label names the trade-off plainly.
-    if awake.lid_closed_supported {
+    // The modes. Exactly one applies, so they are drawn as a radio group:
+    // picking one switches the running session over to it (or starts an
+    // indefinite session if none is running).
+    let mode_item = |id: &str, label: &str, mode: AwakeMode| {
         let _ = sub.append(&CheckMenuItem::with_id(
-            AWAKE_LID_ID,
-            "Stay awake with lid closed (runs hot)",
+            id,
+            label,
             true,
-            awake.lid_closed,
+            awake.mode == mode,
             None,
         ));
-        // Passwordless helper (Option B): once installed and approved,
-        // lid-closed toggles skip the admin prompt. Show exactly one
-        // relevant action for the current state.
+    };
+    mode_item(
+        AWAKE_MODE_SCREEN_ID,
+        "Keep screen & Mac awake",
+        AwakeMode::ScreenAndSystem,
+    );
+    mode_item(
+        AWAKE_MODE_SYSTEM_ID,
+        "Keep Mac awake, allow screen off",
+        AwakeMode::SystemOnly,
+    );
+    // Lid-closed keep-awake only exists where the OS lets us set it (the
+    // non-App-Store macOS build); hide it entirely elsewhere so the menu
+    // never offers a control that would do nothing. Toggling it prompts
+    // for an admin password, and the machine has no way to shed heat with
+    // the lid shut, so the label names the trade-off plainly.
+    if awake.lid_closed_supported {
+        mode_item(
+            AWAKE_MODE_LID_ID,
+            "Keep running with lid closed (runs hot)",
+            AwakeMode::LidClosed,
+        );
+    }
+    let _ = sub.append(&PredefinedMenuItem::separator());
+
+    for (label, dur) in AWAKE_PRESETS {
+        let _ = sub.append(&MenuItem::with_id(awake_start_id(*dur), *label, true, None));
+    }
+    if crate::prompt::CUSTOM_DURATION_SUPPORTED {
+        let label = match awake.custom_minutes {
+            Some(m) => format!("Custom... ({m} min)"),
+            None => "Custom...".to_string(),
+        };
+        let _ = sub.append(&MenuItem::with_id(AWAKE_CUSTOM_ID, label, true, None));
+    }
+
+    // Passwordless helper (Option B): once installed and approved,
+    // lid-closed switches skip the admin prompt. Show exactly one
+    // relevant action for the current state.
+    if awake.lid_closed_supported {
+        let _ = sub.append(&PredefinedMenuItem::separator());
         if awake.helper_active {
             let _ = sub.append(&MenuItem::new("Passwordless mode: on", false, None));
             let _ = sub.append(&MenuItem::with_id(
@@ -394,6 +462,7 @@ fn build_awake_submenu(awake: &AwakeView) -> Submenu {
             ));
         }
     }
+    let _ = sub.append(&PredefinedMenuItem::separator());
     let _ = sub.append(&MenuItem::with_id(
         AWAKE_END_ID,
         "End current session",
