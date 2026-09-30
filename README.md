@@ -104,37 +104,81 @@ the display modes, and the trial. Subsequent launches are silent.
 
 ### Keep awake
 
-A keep-awake session stops your machine from idle sleeping. Open
-**Keep awake** and pick a duration - *Indefinitely*, or
-5 / 15 / 30 minutes, 1 / 2 / 5 hours - and klipa holds the system awake
-until the timer elapses or you choose **End current session**. Toggle
-**Allow display sleep** to let the screen sleep while the system stays
-awake (macOS/Windows).
+A keep-awake session stops your machine from sleeping. Open **Keep awake**,
+pick **how** you want it held and **how long**, and klipa holds it until
+the timer elapses or you choose **End current session**. The submenu
+always shows the real runtime state on its first line: `Inactive`,
+`Awake for 43m`, or `Awake indefinitely`.
+
+**How** is one of three modes (exactly one applies at a time; picking one
+while nothing is running starts an indefinite session in it):
+
+| Mode | What it holds | macOS assertion |
+|---|---|---|
+| **Keep screen & Mac awake** | screen stays lit, machine stays awake | `kIOPMAssertionTypePreventUserIdleDisplaySleep` |
+| **Keep Mac awake, allow screen off** | screen powers down normally, downloads / builds / servers keep running | `kIOPMAssertionTypePreventUserIdleSystemSleep` |
+| **Keep running with lid closed** | as above, plus overriding lid-close sleep (macOS direct download only) | `...PreventUserIdleSystemSleep` + the system `disablesleep` flag |
+
+Each mode takes exactly one assertion, never a combination: holding the
+display awake already holds the system awake, so there is nothing to add.
+
+**How long** is *Indefinitely*, 5 / 15 / 30 minutes, 1 / 2 / 5 hours, or
+**Custom...** (macOS: a native prompt for a number of minutes).
+*Indefinitely* means exactly that: no timer, no computed expiry, no
+maximum, and no countdown in the menu. It ends when you end it, when
+klipa quits, when the Mac restarts, or if macOS invalidates the
+assertion. If the OS refuses to give klipa the wake lock, the menu says
+so and stays `Inactive` rather than showing a session that isn't running.
+
+Your chosen **mode** is remembered across launches. A running **session**
+is not: a power assertion dies with the process that created it, so klipa
+restores your preference and waits for you to start a session, rather
+than inventing one you never asked for.
 
 It uses each OS's native mechanism, with no extra dependency:
 
 | Platform | Mechanism |
 |---|---|
-| macOS | built-in `caffeinate` tool |
+| macOS | IOKit power assertion (`IOPMAssertionCreateWithName`, the public API `caffeinate` wraps) |
 | Windows | `SetThreadExecutionState` (Win32) |
 | Linux | `systemd-inhibit` idle inhibitor (needs systemd-logind) |
 
 On Linux the idle inhibitor covers the whole idle path (screen blank +
-auto-suspend together), so **Allow display sleep** has no separate
-effect there.
+auto-suspend together), so the screen-off mode has no separate effect
+there.
 
-#### Stay awake with the lid closed (macOS, direct download)
+#### Keep running with the lid closed (macOS, direct download)
 
-An idle assertion can't override a lid close, that's an explicit sleep
-request, so **Keep awake** also has **Stay awake with lid closed** on the
-direct-download macOS build. It sets the system `disablesleep` power flag
-via `pmset` and restores it when the session ends, so timed sessions still
-sleep at the moment you set. Optionally **Enable passwordless mode** to
-approve a small signed root helper once (System Settings > Login Items),
-after which lid-closed toggles never prompt for a password. A closed lid
-can't shed heat, so use a bounded session, ideally on the charger. Not
-available in the App Store build, whose sandbox forbids the required
-privileges. See [docs/lid-closed-keep-awake.md](docs/lid-closed-keep-awake.md).
+**A power assertion does not override closing the lid.** A lid close is
+an explicit sleep request, not an idle timeout, so `caffeinate`,
+`ProcessInfo.beginActivity`, `PreventUserIdleSystemSleep` and every other
+ordinary assertion are all ignored by it, on Intel and on Apple Silicon
+alike. Anything claiming otherwise is wrong.
+
+So klipa does two separate things here, and tells you which one you are
+getting:
+
+- **Every build, including the App Store one**, reads the hardware and
+  reports honestly what closing the lid will do right now:
+  `Lid closed: stays awake (external display)`,
+  `Lid closed: connect power to stay awake`, or
+  `Lid closed: Mac will sleep`. That reflects Apple's own supported
+  clamshell mode, which needs an external display, plus AC power on
+  Intel (Apple Silicon can run clamshell on battery).
+- **The direct-download build only** additionally offers **Keep running
+  with lid closed**, which sets the system `disablesleep` power flag via
+  `pmset` and restores it when the session ends, so timed sessions still
+  sleep at the moment you set. This needs root, so it asks for your admin
+  password through the OS's own dialog; optionally **Enable passwordless
+  mode** approves a small signed root helper once (System Settings >
+  Login Items) and later switches never prompt. It is unavailable in the
+  App Store build, whose sandbox forbids the required privileges, and the
+  menu hides it there rather than offering a control that would do
+  nothing.
+
+A closed lid can't shed heat, so use a bounded session, ideally on the
+charger. See [docs/lid-closed-keep-awake.md](docs/lid-closed-keep-awake.md)
+for the full API boundary and the per-hardware behavior table.
 
 ### Menu bar display
 
@@ -180,11 +224,12 @@ klipa/
     └── src/
         ├── adapters/    clipboard / storage (JSON) / watcher  (impl core ports)
         ├── tray.rs      menubar icon + history dropdown (tray-icon + muda)
-        ├── awake.rs     keep-awake sessions (caffeinate/Win32/systemd-inhibit)
+        ├── awake.rs     keep-awake modes + sessions (IOPMAssertion/Win32/systemd-inhibit)
         ├── clamshell.rs sandbox-safe "will the lid sleep the Mac?" status (macOS)
+        ├── prompt.rs    the one native modal: custom keep-awake length (macOS)
         ├── helper.rs    control the root helper (SMAppService; direct macOS build)
         ├── license.rs   7-day trial + €1.99 unlock (off in the App Store build)
-        ├── settings.rs  persistent user prefs (menu bar display mode)
+        ├── settings.rs  persistent user prefs (menu bar display, keep-awake mode)
         ├── weather.rs   opt-in IP location + open-meteo temperature
         ├── updater.rs   daily "new release" check (off in the App Store build)
         ├── http.rs      curl subprocess (no bundled TLS or HTTP client)
@@ -208,7 +253,7 @@ Inner layers never import outer layers. `klipa-core` has zero of:
 - Cross-platform clipboard polling (`arboard`)
 - History kept in a **single local file** on your device, last 200 entries
 - Native **menubar dropdown** of recent copies; click to paste (`tray-icon`)
-- **Keep-awake sessions** - timed or indefinite, native on macOS / Windows / Linux
+- **Keep-awake sessions** - timed, custom, or genuinely indefinite (no timer at all), native on macOS / Windows / Linux
 - **First-launch walkthrough** in the browser (2 min, then never again)
 - **Menu bar display**: icon only (default), date, temperature, or both
 - **Configurable dropdown size** (10 / 25 / 50 / 100 entries), set in-app
