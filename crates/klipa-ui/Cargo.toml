@@ -81,7 +81,12 @@ ed25519-compact = { version = "2", optional = true, default-features = false }
 # NSApplication.setActivationPolicy(.accessory) at startup.
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.5"
-objc2-app-kit = { version = "0.2", features = ["NSApplication"] }
+# NSApplication: menubar-accessory activation policy (platform.rs).
+# NSAlert + NSTextField: the single "custom keep-awake length" modal
+# (prompt.rs). Both are plain public AppKit, sandbox-safe.
+objc2-app-kit = { version = "0.2", features = [
+    "NSApplication", "NSAlert", "NSTextField", "NSControl", "NSView", "NSResponder",
+] }
 objc2-foundation = "0.2"
 # App-side control of the optional privileged root helper that powers
 # passwordless "keep awake with the lid closed" (Option B). A thin wrapper

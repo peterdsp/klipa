@@ -23,6 +23,8 @@ mod http;
 mod license;
 mod paths;
 mod platform;
+// The single native modal: "how long?" for a custom keep-awake session.
+mod prompt;
 mod settings;
 mod tray;
 mod updater;
@@ -97,6 +99,7 @@ impl Klipa {
         awake.helper_active = helper_active;
         awake.helper_needs_approval = helper_needs_approval;
         awake.helper_installable = helper_installable;
+        awake.custom_minutes = self.settings.awake_custom_minutes;
         // Sandbox-safe read of the current lid-close outcome (external
         // display / power), refreshed each rebuild so it tracks hotplug.
         awake.clamshell = clamshell::status();
@@ -157,6 +160,27 @@ impl Klipa {
         self.settings.menubar_display = mode;
         self.settings.save();
         self.refresh_menubar_title();
+        self.rebuild_menu();
+    }
+
+    /// Switch the keep-awake mode and remember it for next launch.
+    ///
+    /// `KeepAwake::set_mode` is the one place that touches the OS: it
+    /// ignores a no-op selection, releases the old assertion before
+    /// taking the new one, and preserves an indefinite session's
+    /// indefiniteness. We only persist the mode it actually adopted, so a
+    /// mode this build cannot honor is never written back.
+    fn set_awake_mode(&mut self, mode: awake::AwakeMode) {
+        self.awake.set_mode(mode);
+        let adopted = self.awake.mode();
+        if self.settings.awake_mode != adopted {
+            self.settings.awake_mode = adopted;
+            self.settings.save();
+        }
+        // The native menu flips a check item's mark on click by itself.
+        // Re-clicking the running mode changes nothing we hash, so force
+        // a redraw or that item would be left unchecked.
+        self.menu_sig = None;
         self.rebuild_menu();
     }
 
@@ -221,17 +245,28 @@ impl ApplicationHandler for Klipa {
                     self.awake.end();
                     self.rebuild_menu();
                 }
-                tray::AWAKE_DISPLAY_ID => {
-                    let next = !self.awake.allow_display_sleep();
-                    self.awake.set_allow_display_sleep(next);
-                    self.rebuild_menu();
+                tray::AWAKE_MODE_SCREEN_ID => {
+                    self.set_awake_mode(awake::AwakeMode::ScreenAndSystem)
                 }
-                tray::AWAKE_LID_ID => {
-                    // Toggling this sets or clears the system sleep flag.
-                    // With the passwordless helper installed it is silent;
+                tray::AWAKE_MODE_SYSTEM_ID => {
+                    self.set_awake_mode(awake::AwakeMode::SystemOnly)
+                }
+                tray::AWAKE_MODE_LID_ID => {
+                    // Switching to this sets the system sleep flag. With
+                    // the passwordless helper installed it is silent;
                     // otherwise it blocks on the OS admin dialog once.
-                    let next = !self.awake.lid_closed();
-                    self.awake.set_lid_closed(next);
+                    self.set_awake_mode(awake::AwakeMode::LidClosed)
+                }
+                tray::AWAKE_CUSTOM_ID => {
+                    // Blocks on a native modal, so read the answer before
+                    // touching the session.
+                    if let Some(minutes) = prompt::custom_minutes(self.settings.awake_custom_minutes)
+                    {
+                        self.settings.awake_custom_minutes = Some(minutes);
+                        self.settings.save();
+                        self.awake
+                            .start(awake::AwakeDuration::For(Duration::from_secs(minutes * 60)));
+                    }
                     self.rebuild_menu();
                 }
                 tray::HELPER_INSTALL_ID => {
@@ -245,8 +280,8 @@ impl ApplicationHandler for Klipa {
                     self.rebuild_menu();
                 }
                 other if tray::parse_awake_start(other).is_some() => {
-                    let dur = tray::parse_awake_start(other).unwrap();
-                    self.awake.start(dur);
+                    let duration = tray::parse_awake_start(other).unwrap();
+                    self.awake.start(duration);
                     self.rebuild_menu();
                 }
                 other => {
@@ -266,7 +301,11 @@ impl ApplicationHandler for Klipa {
         // keep the "X left" countdown label roughly fresh by rebuilding
         // about once a minute while a session is running.
         let awake_ended = self.awake.poll();
-        let awake_stale = self.awake.view().active
+        // Only a *timed* session has a label that goes stale. An
+        // indefinite one reads "Awake indefinitely" forever, so there is
+        // nothing to refresh and no clock to imply.
+        let awake_stale = self.awake.is_active()
+            && !self.awake.is_indefinite()
             && self.awake_refreshed.elapsed() >= Duration::from_secs(60);
         if awake_ended || awake_stale {
             self.awake_refreshed = Instant::now();
@@ -340,15 +379,17 @@ fn menu_signature(
         it.title.hash(&mut h);
     }
     awake.active.hash(&mut h);
-    awake.allow_display_sleep.hash(&mut h);
-    awake.lid_closed.hash(&mut h);
+    (awake.mode as u8).hash(&mut h);
+    awake.indefinite.hash(&mut h);
     awake.lid_closed_supported.hash(&mut h);
     awake.helper_active.hash(&mut h);
     awake.helper_needs_approval.hash(&mut h);
     awake.helper_installable.hash(&mut h);
-    awake.lid_closed_block.map(|b| b as u8).hash(&mut h);
+    awake.custom_minutes.hash(&mut h);
+    awake.error.hash(&mut h);
     (awake.clamshell as u8).hash(&mut h);
     awake.status.hash(&mut h);
+    awake.detail.hash(&mut h);
     match gate {
         license::Gate::Full => 0u8.hash(&mut h),
         license::Gate::Trial { days_left } => {
@@ -453,7 +494,14 @@ fn main() {
         rt: handle,
         dirty,
         tray: None,
-        awake: awake::KeepAwake::new(),
+        awake: {
+            // Restore the *preference* only. The previous run's IOKit
+            // assertion died with that process, so nothing is re-engaged
+            // here: the user starts a session when they want one.
+            let mut keep_awake = awake::KeepAwake::new();
+            keep_awake.restore_mode(settings.awake_mode);
+            keep_awake
+        },
         awake_refreshed: Instant::now(),
         license,
         locked,

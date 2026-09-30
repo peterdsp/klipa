@@ -1,9 +1,16 @@
-//! Persistent user preferences (currently just the menu bar display).
+//! Persistent user preferences (menu bar display, keep-awake mode, ...).
 //!
 //! Kept intentionally tiny: one JSON file next to history.json. New
 //! fields should default to today's behavior so upgrading never breaks
 //! anyone's setup.
+//!
+//! Only *preferences* live here, never runtime state. In particular the
+//! keep-awake **mode** is persisted but a running keep-awake **session**
+//! is not: an IOKit power assertion dies with the process that created
+//! it, so rebuilding one at launch from a saved flag would be inventing a
+//! session the user never started. See `awake.rs`.
 
+use crate::awake::AwakeMode;
 use crate::paths;
 use crate::weather::WeatherState;
 use serde::{Deserialize, Serialize};
@@ -56,6 +63,15 @@ pub struct Settings {
     /// How many entries to show in the dropdown when clicked.
     #[serde(default = "default_dropdown_items")]
     pub dropdown_items: usize,
+    /// Which keep-awake mode new sessions use. A preference only: it is
+    /// restored at launch, it never starts a session by itself.
+    #[serde(default)]
+    pub awake_mode: AwakeMode,
+    /// The last custom keep-awake length, in minutes, so "Custom..."
+    /// re-opens on the value the user picked last. `None` until they set
+    /// one. Never used to start anything on its own.
+    #[serde(default)]
+    pub awake_custom_minutes: Option<u64>,
 }
 
 impl Default for Settings {
@@ -65,6 +81,8 @@ impl Default for Settings {
             welcomed: false,
             history_cap: DEFAULT_HISTORY_CAP,
             dropdown_items: DEFAULT_DROPDOWN_ITEMS,
+            awake_mode: AwakeMode::default(),
+            awake_custom_minutes: None,
         }
     }
 }
