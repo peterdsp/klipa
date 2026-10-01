@@ -190,7 +190,9 @@ mod macos {
                 std::thread::sleep(MONITOR_INTERVAL);
                 if let Ok(mut m) = manager.lock() {
                     if m.tick() {
-                        eprintln!("klipa-helper: lease/session expired; restored normal sleep");
+                        // tick() restores on lease/session expiry, retries an
+                        // unconfirmed restore, and reasserts a slipped override.
+                        eprintln!("klipa-helper: reconciled override state on tick");
                     }
                 }
             });

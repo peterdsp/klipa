@@ -4,17 +4,23 @@ The release is intentionally NOT cut. This records the exact state, the
 blocking gates, and the corrected process, so the owner can finish it when
 the physical gate passes and signing/notarization credentials are available.
 
-Status date: 2026-10-01.
+Status date: 2026-10-02.
 
 ## Candidate
 
-- Version: `0.6.0` (a minor, because the helper/session contract was
-  materially redesigned: authenticated versioned IPC, ownership lease,
-  root-owned journal). Set in `Cargo.toml` `[workspace.package]` and
-  propagated to `Cargo.lock`, the app/helper binaries, and the bundle
-  `Info.plist` (templated by `bundle-macos.sh`) and the helper's embedded
+- Version: `0.6.1`. 0.6.0 was staged as a draft (never published), then
+  reopened: four correctness bugs in its keep-awake implementation were
+  fixed (see `docs/keep-awake-investigation.md`, update 2026-10-02), so the
+  candidate is advanced to 0.6.1. The 0.6.0 draft and its signing evidence
+  do NOT cover this build; 0.6.1 must be built, signed, and notarized afresh
+  with its own hashes, and the stale 0.6.0 draft should not be published.
+  0.6.x is a minor over 0.5.4 because the helper/session contract was
+  materially redesigned (authenticated versioned IPC, ownership lease,
+  root-owned journal). Version is set in `Cargo.toml` `[workspace.package]`
+  and propagated to `Cargo.lock`, the app/helper binaries, the bundle
+  `Info.plist` (templated by `bundle-macos.sh`), and the helper's embedded
   `Info.plist` (from `CARGO_PKG_VERSION`).
-- Branch: `keep-awake-helper-ownership`, merged to `main` after CI passes.
+- Branch: `codex/keep-awake-0.6.1-fixes`, merged to `main` after CI passes.
 - Package-manager manifests (Casks, bucket, winget, AUR) are NOT touched
   here; the hardened `release.yml` updates them only on the real
   `release: published` event, from published checksums, so `brew`/`scoop`
@@ -23,32 +29,47 @@ Status date: 2026-10-01.
   caller Team ID (`KLIPA_TEAM_ID`, baked by `package-macos.sh` from the
   Developer ID identity) and exposes an authenticated socket protocol.
 
-## Current state (2026-10-01): signed/notarized DRAFT staged
+## Current state (2026-10-02): 0.6.0 draft superseded; 0.6.1 to build
 
-- PR #25 squash-merged to `main` (`b5e9a5b`); tag `v0.6.0` pushed; release
-  workflow run 36884600655 fully green.
-- The `v0.6.0` GitHub Release is a DRAFT with all platform artifacts +
-  `SHA256SUMS.txt`. The macOS `.pkg`/`.zip` are Developer ID signed,
-  notarized, stapled, and `spctl`-accepted (re-verified locally). The MAS
-  build was uploaded to App Store Connect (processing, not public).
-- NOT published. Public "Latest" is still v0.5.4. brew/scoop/winget and the
-  website are untouched. Full evidence in `docs/keep-awake-verification.md`.
+- 0.6.0: PR #25 squash-merged to `main` (`b5e9a5b`); tag `v0.6.0` pushed;
+  release workflow run 36884600655 was green and staged a signed/notarized
+  DRAFT (Developer ID signed, notarized, stapled, `spctl`-accepted; MAS
+  uploaded to App Store Connect, processing). That draft is now SUPERSEDED by
+  the 0.6.1 fixes and must not be published; its hashes do not cover 0.6.1.
+- 0.6.1: the four correctness fixes are implemented and merged; a fresh
+  signed/notarized candidate is produced by the release workflow from the
+  0.6.1 tag on `main` (signing is runner-only; there is no Developer ID
+  identity in the local keychain, only Apple Development, so local signing is
+  not possible and is not required).
+- Public "Latest" is still v0.5.4. brew/scoop/winget and the website are
+  untouched until 0.6.1 is published.
 
-To finish, the owner: (1) runs the physical closed-lid gate on the failing
-Mac (see the verification doc), (2) if it passes, publishes the draft
-release (which fires the manifest/winget jobs from the published
-checksums), and (3) updates the website download/support copy to match.
+To finish, with the authorization in the delivery prompt: (1) stage the
+0.6.1 signed/notarized draft from the workflow, (2) run the physical
+closed-lid gate on the failing Mac with that exact candidate (see the
+verification doc), (3) publish 0.6.1 (which fires the manifest/winget jobs
+from the published checksums), and (4) update the website download/support
+copy to match. Delete the stale 0.6.0 draft so there is one identifiable
+candidate.
 
 ## App / helper compatibility
 
-- The socket protocol is unchanged (`set 1` / `set 0` / `ping`), so a new
-  app and the existing helper remain compatible. The helper now bounds
-  request size/time but still speaks the same vocabulary.
+- The socket protocol is NOT the old `set/ping` vocabulary. 0.6.x speaks the
+  versioned `klipa-ipc` protocol (`hello` / `status` / `begin` / `renew` /
+  `end`, `PROTOCOL_VERSION = 1`) over an authenticated connection, carrying
+  typed effective-state and error enums. The app and helper ship from the
+  same build (the helper is bundled in the app and re-registered on update),
+  so they never disagree; a genuinely foreign or stale daemon is caught by
+  the `hello` handshake (`ProtocolMismatch`). The public 0.5.4 release used a
+  different mechanism; a 0.5.4 helper is superseded on upgrade by registering
+  the bundled 0.6.x daemon.
 - The on-disk recovery record changed from the legacy boolean
-  `lid_awake.on` to `lid_awake.json`. Migration is handled: a leftover
-  legacy marker is reconciled at startup as ambiguous ownership (restore to
-  normal sleep when the flag is really set), so upgrading does not strand a
-  prior override. Verify this on the real old-to-new upgrade path.
+  `lid_awake.on` to `lid_awake.json` (app-side admin-prompt path) and a
+  separate root-owned `recovery.json` (helper path). Migration is handled: a
+  leftover legacy marker is reconciled at startup as ambiguous ownership
+  (restore to normal sleep when the flag is really set), so upgrading does
+  not strand a prior override. Verify this on the real old-to-new upgrade
+  path.
 
 ## Blocking gates (must all pass before publishing)
 

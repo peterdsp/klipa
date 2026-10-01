@@ -4,24 +4,33 @@ What has actually been verified, with what, and what remains an open gate.
 Results are kept strictly separate from planned-but-unrun tests. Raw
 machine diagnostics are deliberately NOT committed here.
 
-Status date: 2026-10-01. Candidate commit: the keep-awake reliability
-changes on top of `368cf36`. Version unchanged at 0.5.4 in-tree (no release
-cut; see `docs/keep-awake-release-checklist.md`).
+Status date: 2026-10-02. Candidate: version `0.6.1` in-tree (workspace
+version in `Cargo.toml` + `Cargo.lock`), the keep-awake correctness fixes on
+top of the merged 0.6.0 work. The 0.6.0 draft is superseded; see
+`docs/keep-awake-release-checklist.md`.
 
-## Automated gates (run on the build host, version 0.6.0)
+## Automated gates (run on the build host, version 0.6.1)
 
 Host: model Mac17,3, arm64, macOS 27.0 (build 26A428), Rust 1.98.1.
 
 | Gate | Command | Result |
 |---|---|---|
-| Format | `cargo fmt --all -- --check` | PASS (normalized) |
-| Build | `cargo build --workspace --all-targets --locked` | PASS |
-| Tests | `cargo test --workspace --locked` | PASS (klipa-ui 42, klipa-helper 20, klipa-ipc 6, klipa-core 3, +doctests) |
+| Format | `cargo fmt --all -- --check` | PASS |
+| Build | `cargo build --workspace --locked` | PASS |
+| Tests | `cargo test --workspace --locked` | PASS (klipa-ui 49, klipa-helper 23, klipa-ipc 6, klipa-core 3, +doctests) |
 | Clippy | `cargo clippy --workspace --all-targets --locked -- -D warnings` | PASS |
 | MAS+weather tests | `cargo test -p klipa-ui --no-default-features --features "mas weather" --locked` | PASS (29) |
 | MAS tests | `cargo test -p klipa-ui --no-default-features --features mas --locked` | PASS (29) |
-| No-default tests | `cargo test -p klipa-ui --no-default-features --locked` | PASS (36) |
+| No-default tests | `cargo test -p klipa-ui --no-default-features --locked` | PASS (43) |
 | Clippy, each MAS combo | `cargo clippy -p klipa-ui --no-default-features [--features ...] --all-targets --locked -- -D warnings` | PASS |
+
+The 0.6.1 fixes added regression tests: `helper.rs` shared-deadline update
+(shorten/extend/timed<->indefinite/concurrent ordering) + `restore_confirmed`;
+`lid.rs` restoration-failed stays visible after the session ends; `manager.rs`
+autonomous retry of an unconfirmed restore, `End` reporting `RestoreUnconfirmed`,
+and reassertion of a slipped override; `updater.rs` ordered-transaction
+`plan_update` (no swap before candidate+session verified; rollback kept until
+the installed app verifies).
 
 Deterministic tests covering the section-7 matrix (injected clocks,
 system, and journal seams; no real power state touched, no long sleeps):
@@ -50,19 +59,25 @@ system, and journal seams; no real power state touched, no long sleeps):
   assert/release smoke test.
 - Helper client (`helper.rs`): remaining-session countdown math.
 
-### Pre-existing gate state (clearly separated from this pass)
+### Formatting and lint gate history (resolved)
 
-- `cargo fmt --all -- --check` FAILS on `368cf36` and still reports drift in
-  unrelated files (CI never ran fmt; this is rustfmt style drift, not a
-  code defect). This pass did NOT mass-reformat the tree to keep the diff
-  minimal; only `awake.rs` (the core file edited here) was left fully
-  fmt-clean, and all newly added code is fmt-clean. To green this gate the
-  owner can run a single `cargo fmt --all` normalization commit. Not done
-  here by design.
+- `cargo fmt --all -- --check` FAILED on the `368cf36` baseline (rustfmt
+  style drift in unrelated files, never run by CI). This was resolved by the
+  `cargo fmt --all` normalization commit (`f65b933`) on the way to 0.6.0, so
+  the tree is now fully fmt-clean and the gate PASSES; the 0.6.1 fixes keep
+  it clean. The earlier note that the tree was deliberately left unformatted
+  is superseded.
 - `cargo clippy -- -D warnings` FAILED on `368cf36` (three unrelated lints).
-  Those are now fixed, so the lint gate is green and has been added to CI.
+  Those were fixed, the lint gate is green, and it is enforced in CI.
 
-## Staged release candidate (0.6.0): signed, notarized, DRAFT only
+## Staged release candidate (0.6.0): signed, notarized, DRAFT only; SUPERSEDED
+
+NOTE: the 0.6.0 draft below is retained as evidence that the signing /
+notarization pipeline works end to end, but it is SUPERSEDED by 0.6.1 and
+must not be published. Its hashes cover the buggy 0.6.0 build, not 0.6.1; a
+fresh signed/notarized 0.6.1 candidate with its own hashes is produced by the
+release workflow from the 0.6.1 tag, and this section will be replaced with
+the 0.6.1 evidence once that run completes.
 
 Candidate: tag `v0.6.0` on main commit `b5e9a5b` (PR #25 squash-merge).
 Release workflow run 36884600655: `verify`, `macos`, `windows`, `linux`,

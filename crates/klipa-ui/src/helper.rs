@@ -178,15 +178,69 @@ pub fn status() -> Option<Response> {
     Some(resp)
 }
 
-/// The live renewer: the generation it owns and a stop flag. One at a time.
+/// The authoritative session deadline, shared between the renewer thread and
+/// `update_session`. Both read and write this one cell, so an in-place
+/// duration change takes effect on the very next renewal instead of being
+/// clobbered by a stale copy the thread captured when it started.
+///
+/// Holds an absolute deadline in epoch seconds, or `None` for an indefinite
+/// session. Cheap to clone (it is an `Arc`), and every clone sees the same
+/// value.
+#[derive(Clone, Default)]
+struct SharedDeadline(Arc<Mutex<Option<u64>>>);
+
+impl SharedDeadline {
+    fn new(deadline: Option<u64>) -> Self {
+        SharedDeadline(Arc::new(Mutex::new(deadline)))
+    }
+
+    /// Overwrite the authoritative deadline. The next renewal (thread or
+    /// immediate) will carry this value.
+    fn set(&self, deadline: Option<u64>) {
+        if let Ok(mut g) = self.0.lock() {
+            *g = deadline;
+        }
+    }
+
+    fn get(&self) -> Option<u64> {
+        self.0.lock().ok().and_then(|g| *g)
+    }
+
+    /// Remaining session seconds to send on a renewal at `now`, from the
+    /// current authoritative deadline.
+    fn remaining(&self, now: u64) -> Option<u64> {
+        remaining_session(self.get(), now)
+    }
+}
+
+/// Build the `Renew` request to send now, from the authoritative shared
+/// deadline. Separated so the "always send the current deadline, never a
+/// stale captured copy" rule is unit-tested without a socket.
+fn renew_request(generation: u64, deadline: &SharedDeadline, now: u64) -> Request {
+    Request::Renew {
+        generation,
+        lease_secs: LEASE_SECS,
+        session_secs: deadline.remaining(now),
+    }
+}
+
+/// The live renewer: the generation it owns, the shared authoritative
+/// deadline, and a stop flag. One at a time.
 struct Renewer {
     generation: u64,
-    /// Absolute session deadline (epoch secs), or `None` for indefinite.
-    session_deadline: Option<u64>,
+    /// Shared with the spawned renewer thread, so `update_session` can change
+    /// the remaining time in place and the thread picks it up on its next
+    /// tick rather than continuing to send the deadline it started with.
+    deadline: SharedDeadline,
     stop: Arc<std::sync::atomic::AtomicBool>,
 }
 
 static RENEWER: OnceLock<Mutex<Option<Renewer>>> = OnceLock::new();
+
+/// The generation of the most recent engage, kept so `disengage` can re-send
+/// `End` (and retry a restore) even after the renewer has been torn down. `0`
+/// means nothing is engaged or owed.
+static LAST_GENERATION: AtomicU64 = AtomicU64::new(0);
 
 fn renewer_slot() -> &'static Mutex<Option<Renewer>> {
     RENEWER.get_or_init(|| Mutex::new(None))
@@ -240,54 +294,104 @@ pub fn engage(session_secs: Option<u64>) -> Engage {
         // override (e.g. a race or an unreadable state): do not claim it.
         return Engage::Failed(ErrorReason::SystemRefused);
     }
+    LAST_GENERATION.store(generation, Ordering::SeqCst);
     start_renewer(generation, session_secs);
     Engage::Active
 }
 
 /// Update the remaining session time on the running override (after a
-/// duration change) without retiring it.
+/// duration change) without retiring it. Writes the new deadline into the
+/// authoritative shared cell so the renewer thread carries it from its next
+/// tick onward, and pushes it to the daemon immediately for responsiveness.
 pub fn update_session(session_secs: Option<u64>) {
-    let slot = renewer_slot();
-    if let Ok(mut guard) = slot.lock() {
-        if let Some(r) = guard.as_mut() {
-            r.session_deadline = session_secs.map(|s| now_epoch().saturating_add(s));
-            let generation = r.generation;
-            let deadline = r.session_deadline;
-            // Push the new remaining time to the daemon immediately.
-            drop(guard);
-            let _ = request(&Request::Renew {
-                generation,
-                lease_secs: LEASE_SECS,
-                session_secs: remaining_session(deadline, now_epoch()),
-            });
-        }
+    if let Some((generation, deadline)) = set_session_in_slot(session_secs, now_epoch()) {
+        // Push the new remaining time to the daemon immediately. The renewer
+        // reads the same shared deadline, so even if this request is lost the
+        // next renewal still carries the updated value (not a stale one).
+        let _ = request(&renew_request(generation, &deadline, now_epoch()));
     }
 }
 
-/// End the override and stop the renewer. Idempotent.
-pub fn disengage() {
-    let generation = {
+/// Write the new deadline into the live renewer's shared cell and hand back
+/// its generation and a clone of that same cell. Separated from the socket
+/// I/O so the "update mutates the cell the renewer thread reads" wiring is
+/// unit-tested. `None` if there is no live renewer.
+fn set_session_in_slot(session_secs: Option<u64>, now: u64) -> Option<(u64, SharedDeadline)> {
+    let slot = renewer_slot();
+    let mut guard = slot.lock().ok()?;
+    let r = guard.as_mut()?;
+    r.deadline.set(session_secs.map(|s| now.saturating_add(s)));
+    Some((r.generation, r.deadline.clone()))
+}
+
+/// The outcome of ending (or retrying the end of) the override.
+pub enum Disengage {
+    /// Normal sleep is confirmed restored (or there was nothing to restore).
+    Confirmed,
+    /// The daemon ran the restore but could not confirm it. It keeps the
+    /// recovery record and retries on its own; the caller should keep showing
+    /// a restoration-failed state and an accessible retry.
+    Unconfirmed,
+    /// The daemon could not be reached to confirm the restore.
+    Unreachable,
+}
+
+/// Whether an `End` response confirms the restore completed. A plain OK, or a
+/// stale/not-owner rejection (we no longer own the flag, so nothing is owed by
+/// us), counts as confirmed; any other error does not.
+pub fn restore_confirmed(resp: &Response) -> bool {
+    match resp.error {
+        None => true,
+        Some(ErrorReason::StaleGeneration) | Some(ErrorReason::NotOwner) => true,
+        Some(_) => false,
+    }
+}
+
+/// The generation of the last engage, or `0` if nothing is engaged or owed.
+pub fn last_generation() -> u64 {
+    LAST_GENERATION.load(Ordering::SeqCst)
+}
+
+/// End the override and stop the renewer, reporting whether normal sleep was
+/// verified restored. Idempotent, and safe to call again as a retry: it
+/// re-sends `End` for the last generation even after the renewer is gone, so a
+/// previously-unconfirmed restore can be retried from the UI. On a confirmed
+/// restore it forgets the generation so a further call is a no-op.
+pub fn disengage() -> Disengage {
+    // Stop the renewer if one is live; we are ending, so the lease should be
+    // allowed to lapse too (defense in depth behind the explicit End).
+    {
         let slot = renewer_slot();
-        let mut guard = match slot.lock() {
-            Ok(g) => g,
-            Err(_) => return,
-        };
-        match guard.take() {
-            Some(r) => {
+        if let Ok(mut guard) = slot.lock() {
+            if let Some(r) = guard.take() {
                 r.stop.store(true, Ordering::SeqCst);
-                r.generation
             }
-            None => return,
         }
-    };
-    if let Some(resp) = request(&Request::End { generation }) {
-        record_effective(&resp);
+    }
+    let generation = LAST_GENERATION.load(Ordering::SeqCst);
+    if generation == 0 {
+        return Disengage::Confirmed; // nothing was ever engaged
+    }
+    match request(&Request::End { generation }) {
+        Some(resp) => {
+            record_effective(&resp);
+            if restore_confirmed(&resp) {
+                LAST_GENERATION.store(0, Ordering::SeqCst);
+                Disengage::Confirmed
+            } else {
+                Disengage::Unconfirmed
+            }
+        }
+        None => Disengage::Unreachable,
     }
 }
 
 fn start_renewer(generation: u64, session_secs: Option<u64>) {
     let stop = Arc::new(std::sync::atomic::AtomicBool::new(false));
-    let session_deadline = session_secs.map(|s| now_epoch().saturating_add(s));
+    let deadline = SharedDeadline::new(session_secs.map(|s| now_epoch().saturating_add(s)));
+    // The thread holds its own clone of the SAME shared cell as the renewer
+    // stored in the slot, so `update_session` mutating it is visible here.
+    let thread_deadline = deadline.clone();
     {
         let slot = renewer_slot();
         if let Ok(mut guard) = slot.lock() {
@@ -298,7 +402,7 @@ fn start_renewer(generation: u64, session_secs: Option<u64>) {
             }
             *guard = Some(Renewer {
                 generation,
-                session_deadline,
+                deadline,
                 stop: stop.clone(),
             });
         }
@@ -309,12 +413,10 @@ fn start_renewer(generation: u64, session_secs: Option<u64>) {
             if stop.load(Ordering::SeqCst) {
                 break;
             }
-            let session = remaining_session(session_deadline, now_epoch());
-            let resp = request(&Request::Renew {
-                generation,
-                lease_secs: LEASE_SECS,
-                session_secs: session,
-            });
+            // Read the authoritative deadline fresh each tick so a duration
+            // change made via `update_session` is honored immediately rather
+            // than overwritten with the value captured at start.
+            let resp = request(&renew_request(generation, &thread_deadline, now_epoch()));
             // If the daemon no longer recognizes us (it expired the session
             // on its own, or a newer generation took over), stop renewing.
             match resp {
@@ -331,7 +433,7 @@ fn start_renewer(generation: u64, session_secs: Option<u64>) {
 
 #[cfg(test)]
 mod tests {
-    use super::remaining_session;
+    use super::*;
 
     #[test]
     fn remaining_session_counts_down_and_floors_at_zero() {
@@ -342,5 +444,128 @@ mod tests {
             "never negative"
         );
         assert_eq!(remaining_session(None, 1000), None, "indefinite stays None");
+    }
+
+    /// The session_secs a renewal would carry, for a given shared deadline.
+    fn carried(deadline: &SharedDeadline, now: u64) -> Option<u64> {
+        match renew_request(1, deadline, now) {
+            Request::Renew { session_secs, .. } => session_secs,
+            _ => unreachable!("renew_request builds a Renew"),
+        }
+    }
+
+    #[test]
+    fn an_in_place_update_is_honored_by_the_renewers_shared_deadline() {
+        // Regression for the stale-deadline bug: the renewer thread must read
+        // the authoritative deadline, so a duration change is not reverted on
+        // the next lease renewal.
+        let now = 1_000;
+        let shared = SharedDeadline::new(Some(now + 300));
+        // The thread holds a clone of the SAME cell start_renewer stored.
+        let thread_view = shared.clone();
+        assert_eq!(carried(&thread_view, now), Some(300));
+
+        // Extend.
+        shared.set(Some(now + 900));
+        assert_eq!(carried(&thread_view, now), Some(900), "extend is seen");
+
+        // Shorten.
+        shared.set(Some(now + 60));
+        assert_eq!(carried(&thread_view, now), Some(60), "shorten is seen");
+
+        // Timed -> indefinite.
+        shared.set(None);
+        assert_eq!(
+            carried(&thread_view, now),
+            None,
+            "timed->indefinite is seen"
+        );
+
+        // Indefinite -> timed.
+        shared.set(Some(now + 120));
+        assert_eq!(
+            carried(&thread_view, now),
+            Some(120),
+            "indefinite->timed is seen"
+        );
+    }
+
+    #[test]
+    fn a_renewal_always_carries_the_latest_committed_deadline() {
+        // Concurrent renewal/update ordering: a renewal built before an update
+        // carries the old value, one built after carries the new, and because
+        // the thread re-reads every tick it never sends a value older than the
+        // last committed update.
+        let now = 2_000;
+        let shared = SharedDeadline::new(Some(now + 100));
+        let before = carried(&shared, now);
+        assert_eq!(before, Some(100));
+        shared.set(Some(now + 500));
+        let after = carried(&shared, now);
+        assert_eq!(after, Some(500));
+        assert!(
+            after > before,
+            "the later read reflects the committed update"
+        );
+    }
+
+    #[test]
+    fn update_mutates_the_cell_the_renewer_thread_reads() {
+        // Wire the slot exactly as start_renewer does, capture the thread's
+        // clone, then run the update path's slot mutation and confirm the
+        // thread's clone sees the new deadline. (Serial: the sole test that
+        // touches the process-global renewer slot.)
+        let now = 5_000;
+        let stop = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let deadline = SharedDeadline::new(Some(now + 100));
+        let thread_view = deadline.clone();
+        {
+            let mut guard = renewer_slot().lock().unwrap();
+            *guard = Some(Renewer {
+                generation: 7,
+                deadline,
+                stop: stop.clone(),
+            });
+        }
+
+        let (generation, handed_back) =
+            set_session_in_slot(Some(600), now).expect("a live renewer");
+        assert_eq!(generation, 7);
+        assert_eq!(
+            carried(&thread_view, now),
+            Some(600),
+            "the renewer thread's own clone sees the update"
+        );
+        assert_eq!(carried(&handed_back, now), Some(600));
+
+        // Clean up the global so other tests see no live renewer.
+        stop.store(true, std::sync::atomic::Ordering::SeqCst);
+        *renewer_slot().lock().unwrap() = None;
+    }
+
+    #[test]
+    fn restore_confirmed_reads_the_end_response() {
+        let ok = Response {
+            helper_version: "x".into(),
+            protocol: 1,
+            generation: 0,
+            effective: Effective::Enabled,
+            lease_remaining_secs: None,
+            error: None,
+            detail: String::new(),
+        };
+        assert!(restore_confirmed(&ok), "a plain OK confirms the restore");
+
+        let owed = Response::error(ErrorReason::RestoreUnconfirmed, "retrying");
+        assert!(
+            !restore_confirmed(&owed),
+            "an unconfirmed restore is not done"
+        );
+
+        // We no longer own the flag: nothing is owed by us.
+        let stale = Response::error(ErrorReason::StaleGeneration, "newer owns it");
+        assert!(restore_confirmed(&stale));
+        let not_owner = Response::error(ErrorReason::NotOwner, "another user");
+        assert!(restore_confirmed(&not_owner));
     }
 }

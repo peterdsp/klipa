@@ -250,3 +250,82 @@ The section-4 items deferred in the first pass are now implemented, on the
 - Signed/notarized artifact: produced only by the release workflow (the
   secrets exist); staged as a draft, not published, pending the physical
   gate and owner go.
+
+## Update 2026-10-02: 0.6.0 candidate reopened; 0.6.1 correctness fixes
+
+The 0.6.0 draft candidate was re-reviewed against the executable code (not
+its own documentation). Four real implementation gaps were found and fixed,
+each with a regression test. Because these change the candidate, the version
+is advanced to 0.6.1; the 0.6.0 draft and its signing evidence do NOT cover
+this build.
+
+1. **Stale renewal clobbered an in-place duration change** (`helper.rs`).
+   The lease renewer thread captured the session deadline it started with,
+   while `update_session` mutated a different copy, so ~20 s after a duration
+   change the renewer overwrote the daemon's deadline with the old value.
+   Fixed with a single authoritative `SharedDeadline` (an `Arc<Mutex>`) read
+   fresh on every renewal and written by `update_session`. Tests cover
+   shorten, extend, timed->indefinite, indefinite->timed, and that the
+   renewer's own clone sees an update (concurrent ordering).
+
+2. **End cleared the error without a verified restore** (`lid.rs`).
+   `end()` set `last_error = None` and dropped the mechanism regardless of
+   whether sleep was actually restored, and `helper::disengage()` returned
+   nothing to check. Now `disengage()` returns Confirmed / Unconfirmed /
+   Unreachable (from the daemon's `End` effective state), `end()` keeps a
+   restoration-failed error until a readback confirms, and `classify()`
+   surfaces `RestorationFailed` even after the session is no longer desired,
+   so the state and its retry control stay visible. The menu's End action is
+   relabelled "Restore normal sleep" and stays reachable in that state.
+
+3. **A failed restore was stranded until a restart** (`manager.rs`). An
+   unconfirmed restore set `active = false`, and `tick()` skipped inactive
+   sessions, so the owed restore was never retried while the daemon ran. Now
+   an owed restore is recorded with a bounded backoff and `tick()` retries it
+   autonomously until confirmed; `End` reports `RestoreUnconfirmed` instead
+   of a false success, and an explicit client retry also re-runs it. Tested
+   as transient failure then recovery with no app/daemon restart.
+
+4. **Updater replaced the bundle before coordinating the session**
+   (`updater.rs`). The bundle swap (including deleting the old bundle) ran
+   before `relaunch()` attempted any power-state cleanup, so the active
+   session was not stopped before the helper-containing bundle was replaced,
+   and the rollback was discarded before the new app/helper was verified.
+   Replaced with an explicit ordered transaction (`apply_update`): verify the
+   candidate's code identity, perform a VERIFIED stop of the session
+   (`lid::end_verified`) BEFORE any swap, replace the bundle keeping the old
+   one as rollback, verify the installed app/helper at its final path, and
+   only then drop the rollback; a failed restore aborts before the swap and a
+   failed install verification rolls back. The ordering is unit-tested via a
+   pure `plan_update`.
+
+Additional hardening from the section-5 review (charger/power transitions):
+`tick()` now reasserts an owned override that has slipped off (flag read back
+enabled while a session is active), so a power-source transition that clears
+`disablesleep` is repaired within the monitor interval rather than silently
+losing protection. This is defense in depth; the charger-transition case
+still requires the physical gate to confirm end to end.
+
+### Reviewed section items with honest limitations (not silently "done")
+
+- **Clock**: the daemon uses the wall-clock epoch for lease/session
+  deadlines on purpose, so they survive a daemon restart (a process-local
+  monotonic clock would not), discriminating boots by `kern.bootsessionuuid`.
+  A backward wall-clock adjustment can extend a lease, but the lease is a
+  short (60 s) crash-safety bound the client renews, so the exposure is
+  bounded. Deadline math is checked (`saturating_add`/`saturating_sub`).
+- **Synchronous UI**: expiry and lease renewal are off the menu thread (the
+  daemon owns expiry; the renewer runs on its own thread). Start/stop are
+  single bounded calls (5 s IO timeout). The admin-prompt fallback's
+  readback and the diagnostics round-trip are bounded and user-initiated.
+- **Helper readiness vs registration**: the lid protection state is driven
+  by verified effective readback from the daemon, not registration. The
+  "Passwordless mode: on" label is still derived from `SMAppService`
+  registration status; it reflects approval, not a live round-trip, which is
+  an acceptable, low-stakes nuance documented here rather than hidden.
+- **Admin-prompt unattended expiry (limitation)**: a TIMED closed-lid
+  session restored without the passwordless helper would need a fresh admin
+  prompt at expiry, which cannot happen behind a shut lid; the app-side
+  journal then restores on the next launch. Unattended timed closed-lid
+  expiry is therefore only reliable with the helper approved. This is a
+  limitation to disclose, not a solved case, and the helper is the fix.

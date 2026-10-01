@@ -105,15 +105,25 @@ pub fn classify(
     helper_needs_approval: bool,
     last_error: Option<LidBlock>,
 ) -> ProtectionState {
-    if !desired {
-        return ProtectionState::Inactive;
-    }
+    // A hard failure is surfaced before the desired check, so a restore that
+    // could not be confirmed stays visible (and its retry stays reachable)
+    // even after the session is no longer wanted, until a readback clears it.
     if let Some(err) = last_error {
         return match err {
-            // A cancelled or missing approval is recoverable by the user.
-            LidBlock::Declined => ProtectionState::AwaitingApproval,
+            // A cancelled or missing approval is only meaningful while a
+            // session is still wanted; otherwise it is moot.
+            LidBlock::Declined => {
+                if desired {
+                    ProtectionState::AwaitingApproval
+                } else {
+                    ProtectionState::Inactive
+                }
+            }
             LidBlock::Refused | LidBlock::Unavailable => ProtectionState::RestorationFailed,
         };
+    }
+    if !desired {
+        return ProtectionState::Inactive;
     }
     if helper_needs_approval && !engaged {
         return ProtectionState::AwaitingApproval;
@@ -208,14 +218,42 @@ impl LidOverride {
         }
     }
 
-    /// End the override and restore normal sleep.
+    /// End the override and restore normal sleep, honoring the verified
+    /// outcome. On a confirmed restore the error is cleared; on an
+    /// unconfirmed one it is kept as [`LidBlock::Refused`] so the menu keeps
+    /// showing a restoration-failed state with a reachable retry, while the
+    /// daemon retries on its own. Also serves as that retry: when nothing is
+    /// engaged but a restore is still owed (helper generation or a retained
+    /// prompt journal), it re-attempts and re-verifies.
     pub fn end(&mut self) {
-        match self.engaged.take() {
-            Some(Mechanism::Helper) => crate::helper::disengage(),
-            Some(Mechanism::Prompt) => prompt_restore(),
-            None => {}
+        let mech = self.engaged.take().or_else(|| {
+            if crate::helper::last_generation() != 0 {
+                Some(Mechanism::Helper)
+            } else if read_journal().is_some() {
+                Some(Mechanism::Prompt)
+            } else {
+                None
+            }
+        });
+        match mech {
+            Some(Mechanism::Helper) => {
+                self.last_error = match crate::helper::disengage() {
+                    crate::helper::Disengage::Confirmed => None,
+                    crate::helper::Disengage::Unconfirmed => Some(LidBlock::Refused),
+                    crate::helper::Disengage::Unreachable => Some(LidBlock::Unavailable),
+                };
+            }
+            Some(Mechanism::Prompt) => {
+                prompt_restore();
+                // prompt_restore keeps the journal on an unconfirmed restore;
+                // reflect what the flag actually reads back as.
+                self.last_error = match read_sleep_flag() {
+                    SleepFlag::Enabled => None,
+                    SleepFlag::Disabled | SleepFlag::Unknown => Some(LidBlock::Refused),
+                };
+            }
+            None => self.last_error = None,
         }
-        self.last_error = None;
     }
 
     /// The protection state to show, given whether a lid session is wanted
@@ -255,10 +293,27 @@ pub fn update_session(session_secs: Option<u64>) {
     }
 }
 
-/// End the lid override and restore normal sleep.
+/// End the lid override and restore normal sleep. Doubles as the retry for a
+/// previously-unconfirmed restore (see [`LidOverride::end`]).
 pub fn end() {
     if let Ok(mut g) = global().lock() {
         g.end();
+    }
+}
+
+/// End the override and report whether normal sleep was verified restored.
+/// Used by the updater to coordinate an explicit, verified stop before it
+/// replaces the bundle that contains the registered helper. A hard
+/// restoration error (or an unreachable daemon) returns false, so the updater
+/// does not replace the helper while an override is still owed.
+#[cfg_attr(any(not(target_os = "macos"), feature = "mas"), allow(dead_code))]
+pub fn end_verified() -> bool {
+    match global().lock() {
+        Ok(mut g) => {
+            g.end();
+            g.last_error().is_none()
+        }
+        Err(_) => false,
     }
 }
 
@@ -563,6 +618,32 @@ mod tests {
         assert_eq!(
             classify(true, false, None, false, Some(LidBlock::Declined)),
             ProtectionState::AwaitingApproval
+        );
+    }
+
+    #[test]
+    fn a_failed_restore_stays_visible_after_the_session_is_no_longer_wanted() {
+        // Regression: ending a session used to clear the error unconditionally,
+        // so a restore that never confirmed vanished from the UI. A hard
+        // restoration failure must remain visible (and thus keep its retry
+        // control reachable) even once the session is no longer desired.
+        assert_eq!(
+            classify(false, false, None, false, Some(LidBlock::Refused)),
+            ProtectionState::RestorationFailed
+        );
+        assert_eq!(
+            classify(false, false, None, false, Some(LidBlock::Unavailable)),
+            ProtectionState::RestorationFailed
+        );
+        // A merely cancelled approval on an unwanted session is moot, though.
+        assert_eq!(
+            classify(false, false, None, false, Some(LidBlock::Declined)),
+            ProtectionState::Inactive
+        );
+        // With no error and nothing wanted, it is plainly inactive.
+        assert_eq!(
+            classify(false, false, None, false, None),
+            ProtectionState::Inactive
         );
     }
 }
