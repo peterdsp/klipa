@@ -39,14 +39,18 @@ impl Sorter {
         items.sort_by(|a, b| {
             // Pinned bucket comes first or last depending on PinTo.
             let pin_cmp = match (a.is_pinned(), b.is_pinned()) {
-                (true, false) => return match self.pin_to {
-                    PinTo::Top => std::cmp::Ordering::Less,
-                    PinTo::Bottom => std::cmp::Ordering::Greater,
-                },
-                (false, true) => return match self.pin_to {
-                    PinTo::Top => std::cmp::Ordering::Greater,
-                    PinTo::Bottom => std::cmp::Ordering::Less,
-                },
+                (true, false) => {
+                    return match self.pin_to {
+                        PinTo::Top => std::cmp::Ordering::Less,
+                        PinTo::Bottom => std::cmp::Ordering::Greater,
+                    }
+                }
+                (false, true) => {
+                    return match self.pin_to {
+                        PinTo::Top => std::cmp::Ordering::Greater,
+                        PinTo::Bottom => std::cmp::Ordering::Less,
+                    }
+                }
                 _ => std::cmp::Ordering::Equal,
             };
             if pin_cmp != std::cmp::Ordering::Equal {

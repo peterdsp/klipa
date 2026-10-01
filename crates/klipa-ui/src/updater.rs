@@ -90,7 +90,9 @@ mod imp {
 
         /// Menu label if an update is pending, e.g. "Update to v0.3.0".
         pub fn menu_label(&self) -> Option<String> {
-            self.pending.as_ref().map(|p| format!("Update to v{}", p.version))
+            self.pending
+                .as_ref()
+                .map(|p| format!("Update to v{}", p.version))
         }
 
         /// Called when the user clicks the update menu item.
@@ -276,7 +278,10 @@ mod imp {
     #[cfg(target_os = "macos")]
     fn relaunch() -> ! {
         if let Some(bundle) = app_bundle_path() {
-            let _ = std::process::Command::new("open").arg("-n").arg(&bundle).spawn();
+            let _ = std::process::Command::new("open")
+                .arg("-n")
+                .arg(&bundle)
+                .spawn();
         }
         std::process::exit(0);
     }
@@ -353,4 +358,3 @@ impl UpdateState {
     }
     pub fn trigger(&self) {}
 }
-

@@ -5,9 +5,7 @@
 use crate::paths;
 use async_trait::async_trait;
 use base64::Engine as _;
-use klipa_core::{
-    ClipboardSource, CoreError, HistoryItem, ItemContent, ItemKind, PasteboardEvent,
-};
+use klipa_core::{ClipboardSource, CoreError, HistoryItem, ItemContent, ItemKind, PasteboardEvent};
 use std::borrow::Cow;
 use std::io::Cursor;
 use std::sync::Mutex;
@@ -181,11 +179,14 @@ impl ClipboardSource for ArboardClipboard {
     }
 
     async fn write(&self, item: &HistoryItem) -> klipa_core::Result<()> {
-        let mut cb =
-            arboard::Clipboard::new().map_err(|e| CoreError::Clipboard(e.to_string()))?;
+        let mut cb = arboard::Clipboard::new().map_err(|e| CoreError::Clipboard(e.to_string()))?;
 
         // Image item -> load the stored PNG and set it on the clipboard.
-        if let Some(c) = item.contents.iter().find(|c| matches!(c.kind, ItemKind::Image)) {
+        if let Some(c) = item
+            .contents
+            .iter()
+            .find(|c| matches!(c.kind, ItemKind::Image))
+        {
             let png = read_image_png(&c.value)
                 .ok_or_else(|| CoreError::Clipboard("image not found".into()))?;
             let (width, height, rgba) =
@@ -212,9 +213,9 @@ impl ClipboardSource for ArboardClipboard {
     }
 
     async fn clear(&self) -> klipa_core::Result<()> {
-        let mut cb =
-            arboard::Clipboard::new().map_err(|e| CoreError::Clipboard(e.to_string()))?;
-        cb.clear().map_err(|e| CoreError::Clipboard(e.to_string()))?;
+        let mut cb = arboard::Clipboard::new().map_err(|e| CoreError::Clipboard(e.to_string()))?;
+        cb.clear()
+            .map_err(|e| CoreError::Clipboard(e.to_string()))?;
         Ok(())
     }
 }

@@ -247,10 +247,7 @@ mod imp {
     /// Return the earlier of two optional timestamps. Used to prefer
     /// whichever trial-start stamp (file vs keychain) is oldest, so
     /// tampering with one always yields the honest date.
-    fn earliest(
-        a: Option<OffsetDateTime>,
-        b: Option<OffsetDateTime>,
-    ) -> Option<OffsetDateTime> {
+    fn earliest(a: Option<OffsetDateTime>, b: Option<OffsetDateTime>) -> Option<OffsetDateTime> {
         match (a, b) {
             (Some(x), Some(y)) => Some(if x < y { x } else { y }),
             (x, y) => x.or(y),
@@ -307,7 +304,9 @@ mod imp {
         }
         match s.split_once('@') {
             Some((local, domain)) => {
-                !local.is_empty() && domain.contains('.') && !domain.starts_with('.')
+                !local.is_empty()
+                    && domain.contains('.')
+                    && !domain.starts_with('.')
                     && !domain.ends_with('.')
             }
             None => false,

@@ -144,8 +144,7 @@ pub fn menubar_title(display: MenubarDisplay, weather: &WeatherState) -> Option<
 
 /// Local-time short date like "Wed 30".
 fn format_date() -> String {
-    const FMT: &[FormatItem<'_>] =
-        format_description!("[weekday repr:short] [day padding:none]");
+    const FMT: &[FormatItem<'_>] = format_description!("[weekday repr:short] [day padding:none]");
     // Prefer the local timezone; fall back to UTC only if the platform
     // does not expose it (some sandboxed environments strip it).
     let now = OffsetDateTime::now_local().unwrap_or_else(|_| OffsetDateTime::now_utc());

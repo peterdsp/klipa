@@ -4,8 +4,7 @@
 use std::path::PathBuf;
 
 pub fn data_dir() -> Option<PathBuf> {
-    directories::ProjectDirs::from("dev", "peterdsp", "klipa")
-        .map(|d| d.data_dir().to_path_buf())
+    directories::ProjectDirs::from("dev", "peterdsp", "klipa").map(|d| d.data_dir().to_path_buf())
 }
 
 /// The single local history file (text + image references).

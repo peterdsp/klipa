@@ -7,7 +7,10 @@
 //! GPU renderer, nothing logged or uploaded.
 
 // Release Windows build runs as a GUI app (no console window).
-#![cfg_attr(all(target_os = "windows", not(debug_assertions)), windows_subsystem = "windows")]
+#![cfg_attr(
+    all(target_os = "windows", not(debug_assertions)),
+    windows_subsystem = "windows"
+)]
 
 mod adapters;
 mod awake;
@@ -233,9 +236,13 @@ impl ApplicationHandler for Klipa {
                     self.license.activate_from_clipboard();
                     self.rebuild_menu();
                 }
-                tray::MENUBAR_ICON_ID => self.set_menubar_display(settings::MenubarDisplay::IconOnly),
+                tray::MENUBAR_ICON_ID => {
+                    self.set_menubar_display(settings::MenubarDisplay::IconOnly)
+                }
                 tray::MENUBAR_DATE_ID => self.set_menubar_display(settings::MenubarDisplay::Date),
-                tray::MENUBAR_TEMP_ID => self.set_menubar_display(settings::MenubarDisplay::Temperature),
+                tray::MENUBAR_TEMP_ID => {
+                    self.set_menubar_display(settings::MenubarDisplay::Temperature)
+                }
                 tray::MENUBAR_BOTH_ID => self.set_menubar_display(settings::MenubarDisplay::Both),
                 other if tray::parse_show_count(other).is_some() => {
                     self.set_dropdown_items(tray::parse_show_count(other).unwrap());
@@ -248,9 +255,7 @@ impl ApplicationHandler for Klipa {
                 tray::AWAKE_MODE_SCREEN_ID => {
                     self.set_awake_mode(awake::AwakeMode::ScreenAndSystem)
                 }
-                tray::AWAKE_MODE_SYSTEM_ID => {
-                    self.set_awake_mode(awake::AwakeMode::SystemOnly)
-                }
+                tray::AWAKE_MODE_SYSTEM_ID => self.set_awake_mode(awake::AwakeMode::SystemOnly),
                 tray::AWAKE_MODE_LID_ID => {
                     // Switching to this sets the system sleep flag. With
                     // the passwordless helper installed it is silent;
@@ -260,7 +265,8 @@ impl ApplicationHandler for Klipa {
                 tray::AWAKE_CUSTOM_ID => {
                     // Blocks on a native modal, so read the answer before
                     // touching the session.
-                    if let Some(minutes) = prompt::custom_minutes(self.settings.awake_custom_minutes)
+                    if let Some(minutes) =
+                        prompt::custom_minutes(self.settings.awake_custom_minutes)
                     {
                         self.settings.awake_custom_minutes = Some(minutes);
                         self.settings.save();

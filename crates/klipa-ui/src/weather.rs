@@ -169,10 +169,7 @@ mod imp {
         );
         let body = crate::http::get(&url, HTTP_TIMEOUT)?;
         let json: serde_json::Value = serde_json::from_slice(&body).ok()?;
-        let t = json
-            .get("current_weather")?
-            .get("temperature")?
-            .as_f64()?;
+        let t = json.get("current_weather")?.get("temperature")?.as_f64()?;
         Some(t.round() as i16)
     }
 }

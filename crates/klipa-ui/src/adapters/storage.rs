@@ -33,7 +33,10 @@ fn migrate_inline_images(items: &mut [HistoryItem]) -> bool {
                 continue;
             }
             // Already a file reference?
-            if paths::image_path(&c.value).map(|p| p.exists()).unwrap_or(false) {
+            if paths::image_path(&c.value)
+                .map(|p| p.exists())
+                .unwrap_or(false)
+            {
                 continue;
             }
             // Otherwise try to treat the value as inline base64 PNG.
@@ -61,8 +64,7 @@ pub struct JsonStore {
 
 impl JsonStore {
     pub async fn new() -> klipa_core::Result<Self> {
-        let path =
-            paths::history_file().ok_or_else(|| CoreError::Storage("no data dir".into()))?;
+        let path = paths::history_file().ok_or_else(|| CoreError::Storage("no data dir".into()))?;
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent).map_err(|e| CoreError::Storage(e.to_string()))?;
         }
@@ -142,7 +144,10 @@ impl HistoryStore for JsonStore {
 
     async fn clear_unpinned(&self) -> klipa_core::Result<()> {
         let mut items = self.lock();
-        items.iter().filter(|i| !i.is_pinned()).for_each(remove_image_files);
+        items
+            .iter()
+            .filter(|i| !i.is_pinned())
+            .for_each(remove_image_files);
         items.retain(|i| i.is_pinned());
         let snapshot = items.clone();
         drop(items);

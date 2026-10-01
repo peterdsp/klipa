@@ -68,11 +68,23 @@ pub const UPDATE_ID: &str = "__klipa_update";
 const AWAKE_PRESETS: &[(&str, AwakeDuration)] = &[
     ("Indefinitely", AwakeDuration::Indefinite),
     ("5 minutes", AwakeDuration::For(Duration::from_secs(5 * 60))),
-    ("15 minutes", AwakeDuration::For(Duration::from_secs(15 * 60))),
-    ("30 minutes", AwakeDuration::For(Duration::from_secs(30 * 60))),
+    (
+        "15 minutes",
+        AwakeDuration::For(Duration::from_secs(15 * 60)),
+    ),
+    (
+        "30 minutes",
+        AwakeDuration::For(Duration::from_secs(30 * 60)),
+    ),
     ("1 hour", AwakeDuration::For(Duration::from_secs(60 * 60))),
-    ("2 hours", AwakeDuration::For(Duration::from_secs(2 * 60 * 60))),
-    ("5 hours", AwakeDuration::For(Duration::from_secs(5 * 60 * 60))),
+    (
+        "2 hours",
+        AwakeDuration::For(Duration::from_secs(2 * 60 * 60)),
+    ),
+    (
+        "5 hours",
+        AwakeDuration::For(Duration::from_secs(5 * 60 * 60)),
+    ),
 ];
 
 /// Menu id for starting a session of this length. Indefinite is carried
@@ -175,7 +187,8 @@ impl Tray {
     ) {
         // Trial elapsed and unlicensed: show only the paywall.
         if gate.is_locked() {
-            self.icon.set_menu(Some(Box::new(paywall_menu(price, notice))));
+            self.icon
+                .set_menu(Some(Box::new(paywall_menu(price, notice))));
             return;
         }
 
@@ -190,7 +203,8 @@ impl Tray {
                 match self.image_ref(it).and_then(|r| self.thumb_icon(r)) {
                     // Image entry -> show a small preview next to the label.
                     Some(icon) => {
-                        let _ = menu.append(&IconMenuItem::with_id(id, label, true, Some(icon), None));
+                        let _ =
+                            menu.append(&IconMenuItem::with_id(id, label, true, Some(icon), None));
                     }
                     None => {
                         let _ = menu.append(&MenuItem::with_id(id, label, true, None));
@@ -199,7 +213,12 @@ impl Tray {
             }
         }
         let _ = menu.append(&PredefinedMenuItem::separator());
-        let _ = menu.append(&MenuItem::with_id(CLEAR_ID, "Clear history", !items.is_empty(), None));
+        let _ = menu.append(&MenuItem::with_id(
+            CLEAR_ID,
+            "Clear history",
+            !items.is_empty(),
+            None,
+        ));
 
         // All the config controls live in one "Settings" submenu so the
         // top-level menu stays short: the only thing that can grow is the
@@ -301,7 +320,11 @@ fn build_settings_submenu(
     shown: usize,
     update: Option<&str>,
 ) -> Submenu {
-    let title = if update.is_some() { "Settings \u{25cf}" } else { "Settings" };
+    let title = if update.is_some() {
+        "Settings \u{25cf}"
+    } else {
+        "Settings"
+    };
     let sub = Submenu::new(title, true);
     let _ = sub.append(&build_awake_submenu(awake));
     let _ = sub.append(&build_menubar_submenu(menubar));
@@ -345,9 +368,7 @@ fn lid_line(awake: &AwakeView) -> Option<&'static str> {
         Some(EngageErr::Lid(LidBlock::Refused)) => {
             Some("Lid closed: system blocked it (managed power policy)")
         }
-        Some(EngageErr::Lid(LidBlock::Unavailable)) => {
-            Some("Lid closed: couldn't run the change")
-        }
+        Some(EngageErr::Lid(LidBlock::Unavailable)) => Some("Lid closed: couldn't run the change"),
         // A plain wake-lock failure says nothing about the lid; the
         // status line above already reports it.
         Some(EngageErr::Assertion) => clamshell_label(awake.clamshell),
@@ -361,7 +382,11 @@ fn lid_line(awake: &AwakeView) -> Option<&'static str> {
 /// Build the "Keep awake" submenu: the live status, the three modes, the
 /// duration presets, the lid-close outlook, and an end action.
 fn build_awake_submenu(awake: &AwakeView) -> Submenu {
-    let title = if awake.active { "Keep awake \u{25cf}" } else { "Keep awake" };
+    let title = if awake.active {
+        "Keep awake \u{25cf}"
+    } else {
+        "Keep awake"
+    };
     let sub = Submenu::new(title, true);
 
     // Runtime state first, always: "Inactive", "Awake indefinitely", or

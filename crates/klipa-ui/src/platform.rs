@@ -12,8 +12,8 @@ pub fn make_menubar_only() {
     use objc2_app_kit::{NSApplication, NSApplicationActivationPolicy};
     use objc2_foundation::MainThreadMarker;
 
-    let mtm = MainThreadMarker::new()
-        .expect("make_menubar_only must be called from the main thread");
+    let mtm =
+        MainThreadMarker::new().expect("make_menubar_only must be called from the main thread");
     let app = NSApplication::sharedApplication(mtm);
     app.setActivationPolicy(NSApplicationActivationPolicy::Accessory);
 }

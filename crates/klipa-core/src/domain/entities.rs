@@ -85,8 +85,9 @@ impl HistoryItem {
         if self.contents.len() != other.contents.len() {
             return false;
         }
-        self.contents.iter().zip(other.contents.iter()).all(|(a, b)| {
-            a.kind == b.kind && a.value == b.value
-        })
+        self.contents
+            .iter()
+            .zip(other.contents.iter())
+            .all(|(a, b)| a.kind == b.kind && a.value == b.value)
     }
 }
