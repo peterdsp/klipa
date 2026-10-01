@@ -407,6 +407,17 @@ mod imp {
         true // equal
     }
 
+    /// Open a URL in the default browser, per OS.
+    fn open_url(url: &str) {
+        #[cfg(target_os = "macos")]
+        let (cmd, args): (&str, &[&str]) = ("open", &[]);
+        #[cfg(target_os = "windows")]
+        let (cmd, args): (&str, &[&str]) = ("cmd", &["/C", "start", ""]);
+        #[cfg(all(unix, not(target_os = "macos")))]
+        let (cmd, args): (&str, &[&str]) = ("xdg-open", &[]);
+        let _ = std::process::Command::new(cmd).args(args).arg(url).spawn();
+    }
+
     #[cfg(test)]
     mod tests {
         use super::*;
@@ -496,17 +507,6 @@ mod imp {
                 }
             }
         }
-    }
-
-    /// Open a URL in the default browser, per OS.
-    fn open_url(url: &str) {
-        #[cfg(target_os = "macos")]
-        let (cmd, args): (&str, &[&str]) = ("open", &[]);
-        #[cfg(target_os = "windows")]
-        let (cmd, args): (&str, &[&str]) = ("cmd", &["/C", "start", ""]);
-        #[cfg(all(unix, not(target_os = "macos")))]
-        let (cmd, args): (&str, &[&str]) = ("xdg-open", &[]);
-        let _ = std::process::Command::new(cmd).args(args).arg(url).spawn();
     }
 }
 

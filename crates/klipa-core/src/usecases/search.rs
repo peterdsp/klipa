@@ -21,16 +21,9 @@ pub struct SearchResult<'a> {
     pub ranges: Vec<(usize, usize)>,
 }
 
+#[derive(Default)]
 pub struct Searcher {
     fuzzy: SkimMatcherV2,
-}
-
-impl Default for Searcher {
-    fn default() -> Self {
-        Self {
-            fuzzy: SkimMatcherV2::default(),
-        }
-    }
 }
 
 impl Searcher {
@@ -86,7 +79,7 @@ impl Searcher {
                     })
             })
             .collect();
-        out.sort_by(|a, b| b.score.cmp(&a.score));
+        out.sort_by_key(|a| std::cmp::Reverse(a.score));
         out
     }
 

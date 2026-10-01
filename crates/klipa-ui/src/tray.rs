@@ -106,11 +106,14 @@ pub fn parse_awake_start(id: &str) -> Option<AwakeDuration> {
 const MAX_MENU_ITEMS_HARD: usize = 20;
 const LABEL_MAX_CHARS: usize = 48;
 
+/// A decoded menu thumbnail: RGBA bytes with its width and height.
+type Thumb = (Vec<u8>, u32, u32);
+
 pub struct Tray {
     icon: TrayIcon,
     /// Cache of generated thumbnails keyed by the image reference id,
     /// so we decode each image file at most once.
-    thumbs: RefCell<HashMap<String, (Vec<u8>, u32, u32)>>,
+    thumbs: RefCell<HashMap<String, Thumb>>,
 }
 
 impl Tray {
@@ -158,6 +161,7 @@ impl Tray {
     /// Rebuild the dropdown from the current history snapshot, the
     /// keep-awake session state, and the license gate. `notice` is an
     /// optional transient status line (e.g. activation feedback).
+    #[allow(clippy::too_many_arguments)]
     pub fn set_menu(
         &self,
         items: &[HistoryItem],
