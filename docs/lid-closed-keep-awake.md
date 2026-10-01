@@ -208,19 +208,31 @@ happens in the daemon.
   `.status()`, `.unregister()`. The tray shows one of "Enable passwordless
   mode", "Approve ... in Settings", or "Turn off passwordless mode"
   depending on `status()`.
-- **The daemon** ([`crates/klipa-helper`](../crates/klipa-helper)) is
-  dependency-free pure `std`. It runs as root under launchd
-  (`RunAtLoad` + `KeepAlive`), listens on a fixed Unix socket
-  (`/var/run/dev.peterdsp.klipa.helper.sock`), and accepts a closed
-  whitelist of commands: `set 1`, `set 0`, `ping`. Anything else is
-  rejected, so a compromise of the app can only toggle system sleep, never
-  run arbitrary code as root. This matches the chosen scope: the helper
-  does the power toggle and nothing else. Each request is bounded in size
-  (256 bytes) and time (a 5s read/write deadline), so a client that
-  connects and then stalls or floods cannot wedge the single accept loop or
-  exhaust memory. The command parser is a separate, unit-tested whitelist
-  (`classify`), so CI exercises the helper logic rather than only compiling
-  the daemon.
+- **The daemon** ([`crates/klipa-helper`](../crates/klipa-helper)) runs as
+  root under launchd (`RunAtLoad` + `KeepAlive`), listens on a fixed Unix
+  socket (`/var/run/dev.peterdsp.klipa.helper.sock`), and speaks the
+  versioned, structured protocol in [`crates/klipa-ipc`](../crates/klipa-ipc):
+  a closed set of typed operations (`hello` / `status` / `begin` / `renew`
+  / `end`), never a shell command, path, settings key, or environment, so a
+  compromised app can only ask for one of those operations. Each request is
+  bounded in size and time, so a stalled or flooding client cannot wedge
+  the accept loop or exhaust memory. Crucially, the daemon (not the UI)
+  **owns the override**: it writes a root-owned recovery journal before it
+  changes the flag, verifies every restore, keeps the record until a
+  restore is confirmed, and reconciles any leftover at startup. It holds the
+  override under a renewable crash-safety **lease** plus a **session
+  deadline** it owns, so a dead or frozen app releases the override on its
+  own and timed sessions end unattended regardless of the UI. It never
+  depends on Rust `Drop` (which cannot run after `SIGKILL` or power loss).
+  See `manager.rs`.
+- **Authenticated callers.** The socket is world-connectable, but that is
+  not the trust boundary: every connection is validated by the peer's
+  kernel audit token resolved to a `SecCode` and checked against a pinned
+  designated requirement (klipa's identifier, an Apple anchor, and klipa's
+  Team ID, baked in at build time from the signing identity). A process
+  that is not klipa, or not signed by klipa's team, is rejected before any
+  power operation. In an unsigned build no Team ID is baked, so the daemon
+  fails closed and the app uses the admin-prompt path. See `auth.rs`.
 - **Embedded `Info.plist` (required).** `SMAppService` only registers a
   daemon whose helper executable carries a bundle identifier, which for a
   plain (non-Xcode) binary means an `Info.plist` in the Mach-O
@@ -243,12 +255,11 @@ happens in the daemon.
   uses Option A).
 
 Transport is a local Unix socket rather than XPC. XPC from Rust needs C
-blocks and a large amount of unsafe libxpc FFI; a `std` Unix socket is
-robust and auditable. The cost is a weaker peer check: the socket is
-created `0666`, so any local process running as the user could also ask to
-toggle system sleep. The capability is deliberately limited to that one
-benign power setting. Hardening to a code-signed XPC peer check is the
-natural future step if that residual risk ever matters.
+blocks and a large amount of unsafe libxpc FFI; a `std` Unix socket plus an
+audit-token `SecCode` check gives the equivalent caller-identity guarantee
+(the connecting process must be klipa, signed by klipa's team) with far
+less unsafe surface. The socket's file mode is not relied on for security:
+an unauthorized peer is rejected by the signature check, not by the mode.
 
 ## User flow
 
@@ -332,10 +343,11 @@ feature is built with that firmly in mind:
   removes this**: with it installed, timed lid-closed sessions end fully
   unattended, so "sleep at the time I set" works hands-off. Plain (non-lid)
   timed sessions are unaffected either way.
-- **Helper socket peer check.** The helper socket is `0666`, so any local
-  process running as the user could ask to toggle system sleep. The
-  capability is limited to that one benign setting; a code-signed XPC peer
-  check would tighten it further.
+- **Helper caller check.** The helper validates each caller by code
+  signature (audit token to `SecCode`, pinned to klipa's identifier and
+  Team ID), so a non-klipa process cannot toggle system sleep even though
+  the socket is world-connectable. This is verified on signed builds; an
+  unsigned build has no Team ID to pin and fails closed.
 - **Undocumented behavior.** `disablesleep` is not a documented API. A
   future macOS could change lid-close behavior. The idle-only keep-awake,
   which uses supported public API, remains the always-available baseline.

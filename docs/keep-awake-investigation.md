@@ -194,21 +194,59 @@ These cannot be simulated. `SleepDisabled=1`, a created assertion, a VM, or
 a CI run do NOT satisfy them. The required evidence and exact steps are in
 `docs/keep-awake-verification.md`.
 
-## Remaining work (scoped, not done in this pass)
+## Update 2026-10-01: deep redesign completed (version 0.6.0)
 
-Honestly out of scope for what was completed here, and required before the
-closed-lid objective can be called fully fixed:
+The section-4 items deferred in the first pass are now implemented, on the
+`keep-awake-helper-ownership` branch, targeting version 0.6.0:
 
-- Authenticated, bounded, versioned helper IPC (audit token / code
-  signature / Team ID), session ownership + renewable lease, and a
-  root-owned durable journal inside the daemon, with launchd-based
-  autonomous recovery. (Brief sections 4 and parts of 5/6.)
-- A richer session state model in the UI (preparing / awaiting approval /
-  verifying / active / degraded / restoring / restoration-failed) driven by
-  a verified effective-state read, not an in-memory session. (Brief 3, 6.)
-- Keep-awake + restore controls reachable after trial lock. (Finding 12.)
-- Gap-free override transaction on mode/duration change, and moving
-  blocking IPC/subprocess/`Drop` restore off the event-loop thread.
-  (Findings 7, 8.)
-- Explicit updater handover sequence that reconciles owned power state
-  before bundle replacement/relaunch. (Finding 9, brief 8.)
+- **Shared versioned protocol** (`crates/klipa-ipc`): a closed set of typed
+  operations (hello/status/begin/renew/end), effective-state and error
+  enums, bounded newline-framed JSON. No shell, path, settings key, or env
+  can be expressed on the wire. (6 unit tests.)
+- **Authenticated helper IPC** (`crates/klipa-helper/src/auth.rs`): every
+  connection is validated by the peer's kernel audit token resolved to a
+  `SecCode` and checked against a pinned designated requirement (klipa
+  identifier + Apple anchor + Team ID baked at build time from the signing
+  identity). Fails closed when unsigned. The requirement builder is unit
+  tested; the live `SecCode` path is device-gated FFI (see below).
+- **Daemon ownership + lease + journal** (`crates/klipa-helper/src/manager.rs`):
+  one component owns the `disablesleep` transaction. A monotonic generation
+  stops stale replies; a renewable crash-safety lease plus a daemon-owned
+  session deadline mean a dead or frozen UI cannot strand the override and
+  the daemon (not the UI) owns timed expiry; a root-owned journal (schema,
+  boot id, generation, owner uid, prior value, phase, deadlines) is written
+  before the flag changes and cleared only after a verified restore; startup
+  reconciles interrupted, prior-boot, and still valid sessions before
+  accepting work; another user cannot end an owner's session. It never
+  relies on Rust `Drop`. (20 unit tests over injected system/journal seams.)
+- **Verified UI state model** (`ProtectionState` in `awake.rs`, computed in
+  `lid.rs`): inactive / preparing / awaiting approval / verifying / active /
+  degraded-recovering / restoring / restoration-failed, driven by the real
+  effective readback from the helper, not in-memory session presence.
+- **Gap-free transitions + off-thread work**: the override lives in the
+  `lid.rs` coordinator driven by explicit session edges from the
+  composition root, not in the assertion `Lock`/`Drop`. A duration change
+  updates the override in place; the lease renewer runs on its own thread,
+  not the menu loop. (Findings 7, 8.)
+- **Trial-lock controls** (finding 12): the paywall menu keeps an
+  always-reachable End keep-awake / restore and Copy diagnostics.
+- **Updater handover** (finding 9): `relaunch()` reconciles owned power
+  (ends the override, restoring sleep) before the detached `process::exit`.
+
+### Still not proven / genuinely remaining
+
+- The physical closed-lid gate (owner hardware). Unchanged: see
+  `docs/keep-awake-verification.md`.
+- The live `SecCode` audit-token validation, the real root daemon behavior
+  under launchd, and the socket round-trips are COMPILE-verified and their
+  pure logic is unit-tested, but are not runtime-verified here (they need
+  the signed app + root daemon on a real Mac). Labeled device-gated.
+- macOS 11/12 weak-linking: `SMAppService` is 13+; the helper path is gated
+  on `>= 13` and 11/12 falls back to the admin prompt, but that the signed
+  binary actually loads on 11/12 (weak-link/deployment target) is not
+  verified without an 11/12 machine. Deployment target and `LSMinimumSystemVersion`
+  should be confirmed there before claiming 11/12 support for ordinary
+  keep-awake.
+- Signed/notarized artifact: produced only by the release workflow (the
+  secrets exist); staged as a draft, not published, pending the physical
+  gate and owner go.

@@ -8,15 +8,20 @@ Status date: 2026-10-01.
 
 ## Candidate
 
-- Base commit: `368cf36` (version 0.5.4) plus the keep-awake reliability
-  changes from this pass.
-- In-tree version: still `0.5.4`. Deliberately NOT bumped, and manifests
-  (Casks, bucket, winget, AUR) deliberately NOT touched, because bumping
-  them would point `brew`/`scoop` users at release assets that do not
-  exist yet. Recommended next version when the gates pass: `0.5.5`
-  (reliability/restore-safety changes; no user-facing contract change that
-  forces a minor). If the authenticated-IPC helper redesign in the
-  investigation doc lands first, cut a minor (`0.6.0`) instead.
+- Version: `0.6.0` (a minor, because the helper/session contract was
+  materially redesigned: authenticated versioned IPC, ownership lease,
+  root-owned journal). Set in `Cargo.toml` `[workspace.package]` and
+  propagated to `Cargo.lock`, the app/helper binaries, and the bundle
+  `Info.plist` (templated by `bundle-macos.sh`) and the helper's embedded
+  `Info.plist` (from `CARGO_PKG_VERSION`).
+- Branch: `keep-awake-helper-ownership`, merged to `main` after CI passes.
+- Package-manager manifests (Casks, bucket, winget, AUR) are NOT touched
+  here; the hardened `release.yml` updates them only on the real
+  `release: published` event, from published checksums, so `brew`/`scoop`
+  never point at assets that do not exist yet.
+- New runtime surface to validate at signing time: the helper now pins the
+  caller Team ID (`KLIPA_TEAM_ID`, baked by `package-macos.sh` from the
+  Developer ID identity) and exposes an authenticated socket protocol.
 
 ## App / helper compatibility
 
@@ -35,14 +40,16 @@ Status date: 2026-10-01.
    `docs/keep-awake-verification.md`. Owner action: run the listed cases on
    the real hardware with the packaged candidate and record pass/fail,
    durations, and artifact hashes. This cannot be delegated to CI or a VM.
-2. Developer ID signing + notarization credentials: AVAILABILITY NOT
-   CONFIRMED in this environment. No signing material was accessed, printed,
-   or committed. Owner action: confirm the `DEVELOPER_ID_CERTS_P12_BASE64`,
-   `CERTS_P12_PASSWORD`, `CI_KEYCHAIN_PASSWORD`, `APPLE_ID`, `TEAM_ID`,
-   `APPLE_APP_SPECIFIC_PASSWORD` secrets exist and are valid for the public
-   direct-download channel. Unsigned/ad-hoc artifacts may only be staged as
-   clearly-identified developer builds, never published to the stable
-   channel.
+2. Developer ID signing + notarization credentials: PRESENT as GitHub repo
+   secrets (confirmed by name only, never read:
+   `DEVELOPER_ID_CERTS_P12_BASE64`, `CERTS_P12_PASSWORD`,
+   `CI_KEYCHAIN_PASSWORD`, `APPLE_ID`, `TEAM_ID`,
+   `APPLE_APP_SPECIFIC_PASSWORD`, plus the MAS + ASC API-key secrets).
+   VALIDITY is confirmed only by actually running the release workflow (a
+   tag push stages a signed/notarized DRAFT; it does not publish). No
+   signing material was accessed, printed, or committed. Local signing is
+   not possible here (no Developer ID identity in the local keychain), so
+   the signed/notarized candidate must come from the Actions runner.
 3. App Store (MAS) upload: reported SEPARATELY. Missing MAS access does not
    block the direct-download release and must not be used to mark it
    incomplete. If MAS secrets exist, the `mas` job validates + uploads to
@@ -106,9 +113,18 @@ Before publishing the draft:
 
 ## Not done (explicitly incomplete)
 
-- No tag pushed, no release published, no manifest bumped.
-- No signed/notarized candidate produced here (credentials unconfirmed;
-  none accessed).
-- The authenticated-IPC helper redesign, UI state model, post-trial control
-  reachability, and updater handover remain open (see the investigation
-  doc). These should be weighed before deciding the final version number.
+- The physical closed-lid gate on the owner's Mac (gate 1). This is the one
+  hard blocker to publication.
+- Public release NOT published, package managers NOT bumped, website NOT
+  changed. A signed/notarized DRAFT staged by the tag push is the holding
+  state until the owner confirms the physical test passed.
+- The live `SecCode` audit-token path, the root daemon under launchd, and
+  the socket round-trips are compile-verified with unit-tested logic but
+  not runtime-verified here (device-gated).
+- macOS 11/12 weak-linking/deployment-target confirmation (needs an 11/12
+  machine); the helper is gated to macOS 13+ with an admin-prompt fallback
+  below that.
+
+The authenticated-IPC helper redesign, the verified UI state model, the
+post-trial control reachability, and the updater handover ARE implemented
+and merged (see the investigation doc "Update" section).
