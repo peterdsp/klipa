@@ -253,6 +253,18 @@ mod imp {
             let _ = std::fs::remove_dir_all(&staging);
             return false;
         }
+        // Verify the downloaded bundle's code identity BEFORE replacing the
+        // installed app. A checksum proves integrity, not authenticity, so
+        // this requires a strict signature, a passing Gatekeeper assessment
+        // (notarization), and a validly signed nested helper. A download
+        // that fails any of these is never swapped in; the caller then
+        // falls back to the release page for a manual, Gatekeeper-checked
+        // install.
+        if !verify_bundle(&extracted) {
+            tracing::warn!("update failed signature/notarization check; not installing");
+            let _ = std::fs::remove_dir_all(&staging);
+            return false;
+        }
         // Move the current bundle aside, then move the new one in.
         let _ = std::fs::remove_dir_all(&old);
         if std::fs::rename(&bundle, &old).is_err() {
@@ -270,6 +282,39 @@ mod imp {
         let _ = std::fs::remove_dir_all(&old);
         let _ = std::fs::remove_dir_all(&staging);
         true
+    }
+
+    /// Whether a shell command exited 0.
+    #[cfg(target_os = "macos")]
+    fn run_ok(cmd: &str, args: &[&str]) -> bool {
+        std::process::Command::new(cmd)
+            .args(args)
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false)
+    }
+
+    /// Verify a downloaded `.app` is a strictly-signed, notarized klipa with
+    /// a validly signed nested helper, before it is allowed to replace the
+    /// installed bundle.
+    #[cfg(target_os = "macos")]
+    fn verify_bundle(app: &std::path::Path) -> bool {
+        let Some(app_str) = app.to_str() else {
+            return false;
+        };
+        let strict = run_ok(
+            "codesign",
+            &["--verify", "--strict", "--deep", "--verbose=2", app_str],
+        );
+        let gatekeeper = run_ok("spctl", &["--assess", "--type", "execute", app_str]);
+        let helper = app.join("Contents/MacOS/klipa-helper");
+        let helper_ok = match helper.to_str() {
+            Some(h) if helper.exists() => run_ok("codesign", &["--verify", "--strict", h]),
+            // No nested helper (should not happen for a direct build) is not
+            // a failure of the app's own signature.
+            _ => true,
+        };
+        strict && gatekeeper && helper_ok
     }
 
     /// Launch the freshly-swapped bundle and exit this (old) process so
