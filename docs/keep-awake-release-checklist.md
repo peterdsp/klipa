@@ -23,6 +23,22 @@ Status date: 2026-10-01.
   caller Team ID (`KLIPA_TEAM_ID`, baked by `package-macos.sh` from the
   Developer ID identity) and exposes an authenticated socket protocol.
 
+## Current state (2026-10-01): signed/notarized DRAFT staged
+
+- PR #25 squash-merged to `main` (`b5e9a5b`); tag `v0.6.0` pushed; release
+  workflow run 36884600655 fully green.
+- The `v0.6.0` GitHub Release is a DRAFT with all platform artifacts +
+  `SHA256SUMS.txt`. The macOS `.pkg`/`.zip` are Developer ID signed,
+  notarized, stapled, and `spctl`-accepted (re-verified locally). The MAS
+  build was uploaded to App Store Connect (processing, not public).
+- NOT published. Public "Latest" is still v0.5.4. brew/scoop/winget and the
+  website are untouched. Full evidence in `docs/keep-awake-verification.md`.
+
+To finish, the owner: (1) runs the physical closed-lid gate on the failing
+Mac (see the verification doc), (2) if it passes, publishes the draft
+release (which fires the manifest/winget jobs from the published
+checksums), and (3) updates the website download/support copy to match.
+
 ## App / helper compatibility
 
 - The socket protocol is unchanged (`set 1` / `set 0` / `ping`), so a new

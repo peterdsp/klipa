@@ -62,6 +62,53 @@ system, and journal seams; no real power state touched, no long sleeps):
 - `cargo clippy -- -D warnings` FAILED on `368cf36` (three unrelated lints).
   Those are now fixed, so the lint gate is green and has been added to CI.
 
+## Staged release candidate (0.6.0): signed, notarized, DRAFT only
+
+Candidate: tag `v0.6.0` on main commit `b5e9a5b` (PR #25 squash-merge).
+Release workflow run 36884600655: `verify`, `macos`, `windows`, `linux`,
+`mas`, and `release` all succeeded; `managers` and `winget` skipped (they
+run only on `release: published`, so brew/scoop/winget were not touched and
+`Casks/klipa.rb` + `bucket/klipa.json` remain at 0.5.4).
+
+macOS signing/notarization evidence (from the run and re-verified locally
+on macOS 27.0 against the downloaded draft asset):
+
+- `notarytool`: "Current status: Accepted ... Processing complete" for both
+  the `.pkg` and the update `.zip`; "The staple and validate action worked!"
+- `pkgutil --check-signature klipa-0.6.0-macos.pkg`: "signed by a developer
+  certificate issued by Apple for distribution", "Notarization: trusted by
+  the Apple notary service", chain "Developer ID Installer: PETROS
+  DHESPOLLARI (YTS4KJBX3P)".
+- `spctl --assess --type install`: "accepted / source=Notarized Developer
+  ID / origin=Developer ID Installer: PETROS DHESPOLLARI (YTS4KJBX3P)".
+- Downloaded `.pkg` SHA256 matches `SHA256SUMS.txt`
+  (`dab7fda9e51c7578ab34ff5c96a4a9418278a238ce5c400baf00742d8e9c0393`).
+- The helper is signed with the hardened runtime inside-out before the app;
+  the Team ID (`YTS4KJBX3P`) is baked into the helper for the caller check.
+
+App Store: `mas` job validated and uploaded `klipa-0.6.0-mas.pkg` to App
+Store Connect (Delivery UUID `6e01e24a-2507-4354-a0b7-4de59cf2db30`, "No
+errors uploading"). That is an upload to processing, NOT public store
+availability; review/release remain manual in App Store Connect.
+
+Release state: the GitHub Release for `v0.6.0` is a DRAFT. The public
+"Latest" release is still v0.5.4. Nothing was published, no package-manager
+manifest was changed, and the website was not touched. This is the holding
+state until the physical gate passes and the owner gives the go.
+
+Draft asset checksums (`SHA256SUMS.txt`):
+
+```
+944d5fdda88429d7a353633b6c59362a13222db2b546d103264c1178c6251015  klipa-0.6.0-1.x86_64.rpm
+13901e1e1518f56f51107a33349ecd4a6d8e1ed7a78dce9753c7ac32c6f8ee08  klipa-0.6.0-linux-x86_64.tar.gz
+dab7fda9e51c7578ab34ff5c96a4a9418278a238ce5c400baf00742d8e9c0393  klipa-0.6.0-macos.pkg
+586e9031b7452cd6929eeffd4b419daad36b5cf8d679b68a5e3c060a9868f4bf  klipa-0.6.0-macos.zip
+c8f5872f7aac8ce86902e9c1cbc156b8921823d3e310eb138cec9aba3a50c2d4  klipa-0.6.0-windows-x64-setup.exe
+871755b34988e4fd10b13fbc8361014b8ec0ed691e39db706bbd81d9c8ede15e  klipa-0.6.0-windows-x64.zip
+e02bbd17dc9edcb26934ce0126c1c23429a42f8be140dc38177e425989eeb93f  klipa-0.6.0-x86_64.AppImage
+1ad7a7f2e3dff960ef820e91229b88cc05a6073fe81cdfde7f88983c32133e88  klipa_0.6.0_amd64.deb
+```
+
 ## Physical closed-lid gate: NOT SATISFIED (blocked on owner hardware)
 
 None of the closed-lid behavior has been physically verified. The brief is
