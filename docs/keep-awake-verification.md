@@ -32,6 +32,54 @@ and reassertion of a slipped override; `updater.rs` ordered-transaction
 `plan_update` (no swap before candidate+session verified; rollback kept until
 the installed app verifies).
 
+## 0.6.1 signed/notarized candidate + install evidence (2026-10-02)
+
+Merge: PR #26 squash-merged to `main` as `69994e7`. Tag `v0.6.1` pushed from
+that commit. Release workflow run 36929463010: `verify`, `macos`, `windows`,
+`linux`, `mas`, `release` all green; `managers`/`winget` correctly skipped
+(they run only on `release: published`). The `v0.6.1` GitHub Release is a
+DRAFT; public "Latest" remains v0.5.4.
+
+Signed/notarized verification (performed locally on macOS 27.0, build 26A428,
+against the downloaded draft assets):
+
+- Checksums match `SHA256SUMS.txt` exactly:
+  - `klipa-0.6.1-macos.pkg`: `aa9a01bd21670956f144e7232735e7dd988030fcdc6edf147d6802d6070782c3`
+  - `klipa-0.6.1-macos.zip`: `5bae708431efd9cb80cfe0b6ff54867f64f99bae7c2af43ef9be765eb120e459`
+- `pkgutil --check-signature` (pkg): "signed by a developer certificate
+  issued by Apple for distribution", "Notarization: trusted by the Apple
+  notary service", chain "Developer ID Installer: PETROS DHESPOLLARI
+  (YTS4KJBX3P)".
+- `spctl --assess --type install` (pkg) and `--type execute` (app): accepted,
+  source=Notarized Developer ID.
+- `xcrun stapler validate`: "The validate action worked!" for the pkg and app.
+- `codesign --verify --strict --deep` on the app: valid, satisfies its
+  Designated Requirement; nested `Contents/MacOS/klipa-helper` verifies strict,
+  Identifier `dev.peterdsp.klipa.helper`, TeamIdentifier `YTS4KJBX3P`, signed
+  with "Developer ID Application: PETROS DHESPOLLARI". LaunchDaemon plist
+  `dev.peterdsp.klipa.helper.plist` present under `Contents/Library/LaunchDaemons/`.
+  App `CFBundleShortVersionString` = `0.6.1`.
+
+Install on the owner's Mac (Mac17,3, arm64, macOS 27.0 build 26A428):
+
+- Upgraded from the installed `0.5.4` to `0.6.1` at `/Applications/klipa.app`
+  (old bundle retained as rollback). Final-path verification: codesign strict
+  deep valid, spctl accepted (Notarized Developer ID), staple valid, version
+  `0.6.1`. Launched and running as a menu-bar app.
+- User data preserved intact (separate data dir, untouched by install, and
+  byte-identical to a pre-install backup): `history.json` (112 items),
+  `images/`, `settings.json`, and `license.json`.
+- Observed state: the app is in the expired-trial lock (trial started
+  2026-09-06, 7-day `TRIAL_DAYS`, no activated license). While locked the
+  watcher intentionally stops recording new clipboard entries and the paywall
+  menu does not expose the keep-awake mode/preset controls, so live clipboard
+  capture and starting a new keep-awake session (including the lid-closed
+  physical case) require the app to be unlocked first (activate a license, or
+  an active trial). Confirmed this is correct product behavior, not a 0.6.1
+  regression: the clipboard and licensing code are unchanged and the lock is a
+  pre-existing trial expiry. The paywall still keeps "End keep-awake / restore
+  normal sleep" reachable whenever a session is active or a restore is owed.
+
 Deterministic tests covering the section-7 matrix (injected clocks,
 system, and journal seams; no real power state touched, no long sleeps):
 

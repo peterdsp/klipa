@@ -52,6 +52,28 @@ from the published checksums), and (4) update the website download/support
 copy to match. Delete the stale 0.6.0 draft so there is one identifiable
 candidate.
 
+## Delivery ledger (0.6.1)
+
+| Channel / step | State |
+|---|---|
+| Implementation (4 fixes + reassert) | DONE, with regression tests |
+| Merge to remote main | DONE (`69994e7`, PR #26 squash) |
+| CI (fmt/build/clippy/test + MAS combos) | PASS on the merge and on the tag commit |
+| Signing (Developer ID) | DONE on the runner (local keychain has no Developer ID; runner-only) |
+| Notarization + stapling | DONE and re-verified locally (pkg + app) |
+| Draft release staged | DONE (`v0.6.1` draft; assets + SHA256SUMS) |
+| Install on owner Mac | DONE (`/Applications/klipa.app` 0.6.1, verified, running; data preserved) |
+| Physical closed-lid gate | NOT SATISFIED (needs owner hardware + an unlocked app) |
+| App unlock (license/active trial) | NOT DONE (installed app is in expired-trial lock; owner action) |
+| Passwordless helper approval | NOT DONE (owner action in System Settings; reachable once unlocked) |
+| Public release published | NOT DONE (gated on the physical test) |
+| Updater finds new version | VERIFIED by design (website + in-app updater read the latest-release API); confirm after publish |
+| Homebrew / Scoop | NOT DONE (workflow updates them on `release: published` from published checksums) |
+| winget / AUR | NOT DONE (same; external acceptance reported separately) |
+| App Store (MAS) | Uploaded to App Store Connect by the `mas` job (processing, not public); report separately |
+| Website deploy | No change needed: branch Pages (main/docs) serves klipa.peterdsp.dev and resolves downloads client-side from the latest-release API; it auto-shows 0.6.1 once published. API-success and API-failure paths both resolve to real URLs (no dead `#`). |
+| Production smoke checks | PENDING publish |
+
 ## App / helper compatibility
 
 - The socket protocol is NOT the old `set/ping` vocabulary. 0.6.x speaks the
