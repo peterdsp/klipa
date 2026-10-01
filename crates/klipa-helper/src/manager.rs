@@ -366,9 +366,10 @@ impl<S: System, J: JournalStore> OverrideManager<S, J> {
     ) -> Response {
         let now = self.sys.now_epoch();
         match begin_action(self.state.generation, gen) {
-            BeginAction::Stale => {
-                self.err_response(ErrorReason::StaleGeneration, "a newer session owns the override")
-            }
+            BeginAction::Stale => self.err_response(
+                ErrorReason::StaleGeneration,
+                "a newer session owns the override",
+            ),
             BeginAction::Idempotent if self.owns_active() => {
                 // Same generation re-confirming: just refresh deadlines.
                 self.refresh_lease(now, lease_secs, session_secs);
@@ -377,9 +378,10 @@ impl<S: System, J: JournalStore> OverrideManager<S, J> {
             _ => {
                 // New owner (or same generation that is not yet active):
                 // acquire. Preserve an existing journal's prior value.
-                let existing = self.journal.load().and_then(|j| {
-                    (j.schema == JOURNAL_SCHEMA).then_some(j.prior_disabled)
-                });
+                let existing = self
+                    .journal
+                    .load()
+                    .and_then(|j| (j.schema == JOURNAL_SCHEMA).then_some(j.prior_disabled));
                 let prior = prior_to_record(existing, self.sys.read_flag());
                 let lease_deadline = now.saturating_add(lease_secs);
                 let session_deadline = session_secs.map(|s| now.saturating_add(s));
@@ -423,11 +425,17 @@ impl<S: System, J: JournalStore> OverrideManager<S, J> {
                     }
                     SetOutcome::Refused => {
                         self.rollback(prior);
-                        self.err_response(ErrorReason::SystemRefused, "system did not apply the change")
+                        self.err_response(
+                            ErrorReason::SystemRefused,
+                            "system did not apply the change",
+                        )
                     }
                     SetOutcome::Unavailable => {
                         self.rollback(prior);
-                        self.err_response(ErrorReason::SystemUnavailable, "could not run the change")
+                        self.err_response(
+                            ErrorReason::SystemUnavailable,
+                            "could not run the change",
+                        )
                     }
                 }
             }
@@ -452,9 +460,10 @@ impl<S: System, J: JournalStore> OverrideManager<S, J> {
                 self.refresh_lease(now, lease_secs, session_secs);
                 self.ok_response()
             }
-            OwnerCheck::Stale => {
-                self.err_response(ErrorReason::StaleGeneration, "a newer session owns the override")
-            }
+            OwnerCheck::Stale => self.err_response(
+                ErrorReason::StaleGeneration,
+                "a newer session owns the override",
+            ),
             _ => self.err_response(ErrorReason::NotOwner, "no such active session to renew"),
         }
     }
@@ -470,9 +479,10 @@ impl<S: System, J: JournalStore> OverrideManager<S, J> {
                 self.restore_and_reconcile(self.state.prior_disabled);
                 self.ok_response()
             }
-            OwnerCheck::Stale => {
-                self.err_response(ErrorReason::StaleGeneration, "a newer session owns the override")
-            }
+            OwnerCheck::Stale => self.err_response(
+                ErrorReason::StaleGeneration,
+                "a newer session owns the override",
+            ),
             // Ending when we own nothing (or an older generation that is
             // already gone) is not an error: the desired end state is
             // already true.
@@ -708,7 +718,10 @@ mod tests {
         let r = m.handle(&begin(1, 90, None), 501);
         assert_eq!(r.error, Some(ErrorReason::SystemRefused));
         assert_eq!(sys.flag(), SleepFlag::Enabled, "flag must not be left set");
-        assert!(!j.present(), "no record should linger after a clean rollback");
+        assert!(
+            !j.present(),
+            "no record should linger after a clean rollback"
+        );
     }
 
     #[test]
@@ -719,7 +732,11 @@ mod tests {
         let mut m = mgr(sys.clone(), j.clone());
         let r = m.handle(&begin(1, 90, None), 501);
         assert_eq!(r.error, Some(ErrorReason::JournalUnwritable));
-        assert_eq!(sys.flag(), SleepFlag::Enabled, "never disabled without a record");
+        assert_eq!(
+            sys.flag(),
+            SleepFlag::Enabled,
+            "never disabled without a record"
+        );
     }
 
     #[test]
@@ -733,7 +750,11 @@ mod tests {
         // prior recorded as already-disabled; ending leaves the flag set.
         let r = m.handle(&Request::End { generation: 1 }, 501);
         assert!(r.is_ok());
-        assert_eq!(sys.flag(), SleepFlag::Disabled, "someone else's override stays");
+        assert_eq!(
+            sys.flag(),
+            SleepFlag::Disabled,
+            "someone else's override stays"
+        );
         assert!(!j.present());
     }
 
@@ -759,7 +780,11 @@ mod tests {
         // A delayed op from an older session.
         let r = m.handle(&Request::End { generation: 3 }, 501);
         assert_eq!(r.error, Some(ErrorReason::StaleGeneration));
-        assert_eq!(sys.flag(), SleepFlag::Disabled, "newer session still protected");
+        assert_eq!(
+            sys.flag(),
+            SleepFlag::Disabled,
+            "newer session still protected"
+        );
         let r = m.handle(&begin(2, 90, None), 501);
         assert_eq!(r.error, Some(ErrorReason::StaleGeneration));
     }
@@ -834,7 +859,10 @@ mod tests {
         sys.force_next_set_false(SetOutcome::Refused);
         let restored = m.tick();
         assert!(restored, "tick acted on the lapsed lease");
-        assert!(j.present(), "an unconfirmed restore keeps the record for retry");
+        assert!(
+            j.present(),
+            "an unconfirmed restore keeps the record for retry"
+        );
     }
 
     #[test]
@@ -875,7 +903,11 @@ mod tests {
             set_at_epoch: 1000,
         });
         let _m = mgr(sys.clone(), j.clone());
-        assert_eq!(sys.flag(), SleepFlag::Enabled, "no auto-resume across reboot");
+        assert_eq!(
+            sys.flag(),
+            SleepFlag::Enabled,
+            "no auto-resume across reboot"
+        );
         assert!(!j.present());
     }
 
@@ -922,7 +954,11 @@ mod tests {
         m.handle(&begin(1, 90, None), 501); // user A owns it
         let r = m.handle(&Request::End { generation: 1 }, 502); // user B
         assert_eq!(r.error, Some(ErrorReason::NotOwner));
-        assert_eq!(sys.flag(), SleepFlag::Disabled, "owner's protection survives");
+        assert_eq!(
+            sys.flag(),
+            SleepFlag::Disabled,
+            "owner's protection survives"
+        );
         // The real owner can still end it.
         let r = m.handle(&Request::End { generation: 1 }, 501);
         assert!(r.is_ok());
@@ -931,8 +967,14 @@ mod tests {
 
     #[test]
     fn parse_sleep_flag_reads_the_three_states() {
-        assert_eq!(parse_sleep_flag(" SleepDisabled\t\t0\n"), SleepFlag::Enabled);
-        assert_eq!(parse_sleep_flag(" SleepDisabled          1\n"), SleepFlag::Disabled);
+        assert_eq!(
+            parse_sleep_flag(" SleepDisabled\t\t0\n"),
+            SleepFlag::Enabled
+        );
+        assert_eq!(
+            parse_sleep_flag(" SleepDisabled          1\n"),
+            SleepFlag::Disabled
+        );
         assert_eq!(parse_sleep_flag(" hibernatemode 3\n"), SleepFlag::Unknown);
         assert_eq!(parse_sleep_flag("SleepDisabled  ?\n"), SleepFlag::Unknown);
         assert_eq!(parse_sleep_flag(""), SleepFlag::Unknown);

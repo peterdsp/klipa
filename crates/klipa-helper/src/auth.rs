@@ -123,11 +123,8 @@ mod macos {
             flags: u32,
             requirement: *mut *const c_void,
         ) -> i32;
-        fn SecCodeCheckValidity(
-            code: *const c_void,
-            flags: u32,
-            requirement: *const c_void,
-        ) -> i32;
+        fn SecCodeCheckValidity(code: *const c_void, flags: u32, requirement: *const c_void)
+            -> i32;
     }
 
     const UTF8: u32 = 0x0800_0100;

@@ -277,6 +277,14 @@ mod imp {
     /// `swap_bundle`, so the bundle path still resolves.
     #[cfg(target_os = "macos")]
     fn relaunch() -> ! {
+        // Update policy for an active session: an explicit, verified stop
+        // before replacement. Reconcile owned power state (restore normal
+        // sleep, release the lid override) BEFORE this detached thread
+        // exits, since `process::exit` runs no destructors. The relaunched
+        // app does not auto-resume the session (klipa never resurrects one),
+        // so the user restarts keep-awake deliberately after the update.
+        #[cfg(not(feature = "mas"))]
+        crate::lid::end();
         if let Some(bundle) = app_bundle_path() {
             let _ = std::process::Command::new("open")
                 .arg("-n")

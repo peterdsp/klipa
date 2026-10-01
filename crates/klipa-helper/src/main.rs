@@ -44,7 +44,7 @@ fn main() {
 #[cfg(target_os = "macos")]
 mod macos {
     use crate::auth::authenticate_peer;
-    use crate::manager::{JournalStore, Journal, OverrideManager, SetOutcome, SleepFlag, System};
+    use crate::manager::{Journal, JournalStore, OverrideManager, SetOutcome, SleepFlag, System};
     use klipa_ipc::{decode_line, encode_line, ErrorReason, Request, Response, MAX_FRAME_BYTES};
     use std::io::{BufRead, BufReader, Read, Write};
     use std::os::unix::fs::PermissionsExt;
@@ -68,7 +68,10 @@ mod macos {
 
     impl System for OsSystem {
         fn read_flag(&self) -> SleepFlag {
-            match std::process::Command::new("/usr/bin/pmset").arg("-g").output() {
+            match std::process::Command::new("/usr/bin/pmset")
+                .arg("-g")
+                .output()
+            {
                 Ok(out) if out.status.success() => {
                     crate::manager::parse_sleep_flag(&String::from_utf8_lossy(&out.stdout))
                 }

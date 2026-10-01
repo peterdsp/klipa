@@ -19,7 +19,7 @@
 /// Off macOS only `Hidden` is ever produced, so the other variants would
 /// read as "never constructed" there; they are real everywhere it matters.
 #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
-#[derive(Copy, Clone, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum ClamshellStatus {
     /// Closing the lid keeps the Mac running: an external display is
     /// attached, and the hardware's power requirement is met.
