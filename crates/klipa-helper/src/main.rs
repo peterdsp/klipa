@@ -32,16 +32,97 @@ fn main() {
     eprintln!("klipa-helper is a macOS-only privileged helper; nothing to do here.");
 }
 
+/// The helper's entire command vocabulary. A closed whitelist is the
+/// security boundary: the daemon can only ever toggle `disablesleep` or
+/// answer a liveness ping, never anything an attacker might smuggle in.
+/// Parsing is kept separate from acting so the whitelist is unit-tested
+/// without touching `pmset` (and so CI exercises the helper logic, not
+/// just that the daemon compiles).
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+#[derive(Debug, PartialEq, Eq)]
+enum Request {
+    /// `set 1`: disable system sleep (keep awake with the lid closed).
+    Disable,
+    /// `set 0`: restore normal sleep.
+    Enable,
+    /// `ping`: liveness check.
+    Ping,
+    /// Anything else, including an over-long or malformed line.
+    Rejected,
+}
+
+/// Classify one request line. The input is already length-bounded by the
+/// caller; an unrecognized command (or the sentinel used for an over-long
+/// line) is `Rejected`.
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+fn classify(line: &str) -> Request {
+    match line.trim() {
+        "set 1" => Request::Disable,
+        "set 0" => Request::Enable,
+        "ping" => Request::Ping,
+        _ => Request::Rejected,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{classify, Request};
+
+    #[test]
+    fn only_the_whitelist_is_accepted() {
+        assert_eq!(classify("set 1"), Request::Disable);
+        assert_eq!(classify("set 0"), Request::Enable);
+        assert_eq!(classify("ping"), Request::Ping);
+        // Surrounding whitespace / newline is tolerated.
+        assert_eq!(classify("  set 1\n"), Request::Disable);
+    }
+
+    #[test]
+    fn anything_outside_the_whitelist_is_rejected() {
+        for bad in [
+            "",
+            "set",
+            "set 2",
+            "set 1; rm -rf /",
+            "SET 1",
+            "pmset -a disablesleep 1",
+            "ping extra",
+            "set 1 ",
+        ] {
+            // The trailing-space case is tolerated by `trim`, so check the
+            // genuinely hostile ones are rejected.
+            if bad.trim() == "set 1" {
+                continue;
+            }
+            assert_eq!(classify(bad), Request::Rejected, "must reject {bad:?}");
+        }
+    }
+}
+
 #[cfg(target_os = "macos")]
 mod macos {
-    use std::io::{BufRead, BufReader, Write};
+    use super::{classify, Request};
+    use std::io::{BufRead, BufReader, Read, Write};
     use std::os::unix::fs::PermissionsExt;
     use std::os::unix::net::{UnixListener, UnixStream};
+    use std::time::Duration;
 
     /// Fixed socket path. `/var/run` is root-owned and cleared on boot;
     /// the daemon (RunAtLoad) recreates the socket each boot. Kept in sync
     /// by hand with `HELPER_SOCKET` in the app's `helper.rs`.
     const SOCKET_PATH: &str = "/var/run/dev.peterdsp.klipa.helper.sock";
+
+    /// Upper bound on one request line. The whitelist commands are a
+    /// handful of bytes; anything larger is hostile or broken, so the read
+    /// is capped rather than left unbounded (a client that never sends a
+    /// newline could otherwise grow the buffer without limit).
+    const MAX_REQUEST_BYTES: u64 = 256;
+
+    /// How long the daemon waits for a client to send its request before
+    /// giving up on that connection. Bounds a stalled or silent client so
+    /// it cannot hold the single-threaded accept loop, and therefore all
+    /// power operations, open indefinitely.
+    const READ_TIMEOUT: Duration = Duration::from_secs(5);
 
     pub fn run() {
         // Clear any stale socket left by an unclean previous exit, then
@@ -71,30 +152,43 @@ mod macos {
         }
     }
 
-    /// Read one newline-terminated command, act on it, reply `ok`/`err`.
+    /// Read one newline-terminated command (bounded in both size and
+    /// time), act on it, reply `ok`/`err`.
     fn handle(stream: UnixStream) {
+        // Bound how long we wait for the request and how many bytes we
+        // accept, so a client that connects and then stalls or floods
+        // cannot wedge the single accept loop or exhaust memory.
+        let _ = stream.set_read_timeout(Some(READ_TIMEOUT));
+        let _ = stream.set_write_timeout(Some(READ_TIMEOUT));
+
         let mut line = String::new();
         {
-            let mut reader = BufReader::new(&stream);
+            let mut reader = BufReader::new((&stream).take(MAX_REQUEST_BYTES));
             if reader.read_line(&mut line).is_err() {
                 return;
             }
         }
-        let ok = dispatch(line.trim());
+        // If we hit the cap without a newline the request was over-long:
+        // treat it as rejected rather than acting on a truncated command.
+        let request = if line.len() as u64 >= MAX_REQUEST_BYTES && !line.ends_with('\n') {
+            Request::Rejected
+        } else {
+            classify(&line)
+        };
+        let ok = dispatch(request);
         let mut w = stream;
         let _ = w.write_all(if ok { b"ok\n" } else { b"err\n" });
     }
 
-    /// The entire command vocabulary. A closed whitelist is the security
-    /// boundary: the daemon can only ever toggle `disablesleep` or answer
-    /// a liveness ping, never anything an attacker might smuggle in.
-    fn dispatch(cmd: &str) -> bool {
-        match cmd {
-            "set 1" => pmset_disablesleep(true),
-            "set 0" => pmset_disablesleep(false),
-            "ping" => true,
-            other => {
-                eprintln!("klipa-helper: rejected command {other:?}");
+    /// Act on a classified request. The only side effect the daemon ever
+    /// has is toggling `disablesleep`; everything else answers in-process.
+    fn dispatch(request: Request) -> bool {
+        match request {
+            Request::Disable => pmset_disablesleep(true),
+            Request::Enable => pmset_disablesleep(false),
+            Request::Ping => true,
+            Request::Rejected => {
+                eprintln!("klipa-helper: rejected request");
                 false
             }
         }
