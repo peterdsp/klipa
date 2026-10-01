@@ -27,6 +27,8 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
       - uses: Swatinem/rust-cache@v2
       - name: Install Linux deps
         if: runner.os == 'Linux'
@@ -37,9 +39,11 @@ jobs:
             libxcb1-dev libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev \
             libgtk-3-dev libxdo-dev libayatana-appindicator3-dev
       - name: Build
-        run: cargo build --workspace --all-targets
+        run: cargo build --workspace --all-targets --locked
+      - name: Clippy (deny warnings)
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - name: Test
-        run: cargo test --workspace
+        run: cargo test --workspace --locked
 
   # The Mac App Store binary is built with a different feature set
   # (`mas`, no `license`/`frontmost`), so a feature-gated regression can
@@ -51,10 +55,20 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
       - uses: Swatinem/rust-cache@v2
+      # Run the TESTS (not just a build) for each combo, so a feature-gated
+      # regression in the session/helper logic is caught here rather than
+      # only that the code compiles.
       - name: mas + weather (the App Store build)
-        run: cargo build -p klipa-ui --no-default-features --features "mas weather"
+        run: cargo test -p klipa-ui --no-default-features --features "mas weather" --locked
       - name: mas only (weather compiled out)
-        run: cargo build -p klipa-ui --no-default-features --features mas
+        run: cargo test -p klipa-ui --no-default-features --features mas --locked
       - name: no default features (minimal)
-        run: cargo build -p klipa-ui --no-default-features
+        run: cargo test -p klipa-ui --no-default-features --locked
+      - name: clippy across the App Store combos
+        run: |
+          cargo clippy -p klipa-ui --no-default-features --features "mas weather" --all-targets --locked -- -D warnings
+          cargo clippy -p klipa-ui --no-default-features --features mas --all-targets --locked -- -D warnings
+          cargo clippy -p klipa-ui --no-default-features --all-targets --locked -- -D warnings
