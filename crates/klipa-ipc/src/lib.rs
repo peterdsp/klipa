@@ -152,6 +152,12 @@ pub enum ErrorReason {
     SystemRefused,
     /// `pmset` could not be run at all.
     SystemUnavailable,
+    /// An `End` (or autonomous expiry) ran the restore but could not confirm
+    /// normal sleep came back by readback. The daemon keeps the recovery
+    /// record and retries on its own; the client should keep showing a
+    /// restoration-failed state and an accessible retry rather than claiming
+    /// the override is gone.
+    RestoreUnconfirmed,
     /// The root-owned recovery journal could not be written, so the daemon
     /// refused to disable sleep with no way to recover it.
     JournalUnwritable,

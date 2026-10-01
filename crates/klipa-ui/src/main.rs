@@ -331,6 +331,12 @@ impl ApplicationHandler for Klipa {
                 tray::AWAKE_END_ID => {
                     self.awake.end();
                     self.reconcile_lid();
+                    // Covers the retry-after-failed-restore case: no session is
+                    // active, so reconcile_lid (which only acts while engaged)
+                    // would skip it, but a restore may still be owed. lid::end
+                    // doubles as that retry and is a clean no-op otherwise.
+                    #[cfg(all(target_os = "macos", not(feature = "mas")))]
+                    lid::end();
                     self.rebuild_menu();
                 }
                 tray::AWAKE_MODE_SCREEN_ID => {

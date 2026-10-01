@@ -113,12 +113,13 @@ mod imp {
                 let downloaded = installer_url.as_deref().and_then(download_to_temp);
                 #[cfg(target_os = "macos")]
                 match downloaded {
-                    // In-place swap succeeded -> relaunch on the new
-                    // version (this exits the old process).
-                    Some(zip) if swap_bundle(&zip) => relaunch(),
-                    // Download failed, or the swap couldn't write the app
-                    // directory (e.g. a non-admin account): fall back to
-                    // the release page so the user can update by hand.
+                    // The ordered update transaction succeeded -> relaunch on
+                    // the new version (this exits the old process).
+                    Some(zip) if apply_update(&zip) => relaunch(),
+                    // Download failed, the candidate failed verification, the
+                    // active session could not be confirmed restored, or the
+                    // app directory was not writable: fall back to the release
+                    // page so the user can update by hand (Gatekeeper-checked).
                     _ => open_native(RELEASE_PAGE),
                 }
                 #[cfg(not(target_os = "macos"))]
@@ -213,17 +214,53 @@ mod imp {
         (bundle.extension()? == "app").then(|| bundle.to_path_buf())
     }
 
-    /// Swap the running bundle for the freshly-downloaded one, in place,
-    /// as the current user - no installer, no admin prompt. Returns true
-    /// only if the new bundle is now live at the original path.
+    /// The ordered steps of the update transaction, decided from the three
+    /// checks that gate it. Pure, so the ordering rule (never replace the
+    /// helper-containing bundle before the candidate is verified AND the
+    /// active session is confirmed restored, and never discard the rollback
+    /// before the installed app/helper is verified) is unit-tested.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+    enum UpdatePlan {
+        /// Stop before touching the installed bundle.
+        AbortBeforeSwap,
+        /// The swap happened but the installed app/helper failed verification:
+        /// roll back to the retained previous bundle.
+        RollbackAfterSwap,
+        /// Everything healthy: commit and drop the rollback.
+        Commit,
+    }
+
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+    fn plan_update(candidate_ok: bool, session_restored: bool, installed_ok: bool) -> UpdatePlan {
+        if !candidate_ok || !session_restored {
+            return UpdatePlan::AbortBeforeSwap;
+        }
+        if !installed_ok {
+            return UpdatePlan::RollbackAfterSwap;
+        }
+        UpdatePlan::Commit
+    }
+
+    /// Apply a downloaded update as an explicit, ordered transaction:
     ///
-    /// Extraction happens into a staging dir on the *same* volume as the
-    /// bundle, so the two moves (old aside, new in) are same-directory
-    /// renames - atomic, with no window where the app is half-updated or
-    /// missing. Fails cleanly (leaving the old bundle intact) when the
-    /// app directory isn't writable, so the caller can fall back.
+    /// 1. Extract the candidate into a staging dir on the same volume.
+    /// 2. Verify the candidate's authenticated code identity (strict
+    ///    signature + Gatekeeper/notarization + signed nested helper).
+    /// 3. Coordinate the active session: an explicit, VERIFIED stop that
+    ///    restores normal sleep BEFORE the helper-containing bundle is
+    ///    replaced. A restore that cannot be confirmed aborts the update
+    ///    rather than silently proceeding.
+    /// 4. Replace the bundle, keeping the previous one as a rollback.
+    /// 5. Verify the newly installed app/helper at its final path.
+    /// 6. Only once healthy, drop the rollback; otherwise restore it.
+    ///
+    /// Returns true only when the new bundle is live and verified at the
+    /// original path. Fails cleanly (leaving the old bundle intact) at every
+    /// step, so the caller can fall back to a manual install.
     #[cfg(target_os = "macos")]
-    fn swap_bundle(zip: &str) -> bool {
+    fn apply_update(zip: &str) -> bool {
+        use std::fs;
         let Some(bundle) = app_bundle_path() else {
             return false;
         };
@@ -235,8 +272,8 @@ mod imp {
         let old = dir.join(format!(".klipa-old-{pid}.app"));
 
         // Fresh staging dir; bail early if we can't write here at all.
-        let _ = std::fs::remove_dir_all(&staging);
-        if std::fs::create_dir_all(&staging).is_err() {
+        let _ = fs::remove_dir_all(&staging);
+        if fs::create_dir_all(&staging).is_err() {
             return false;
         }
         // `ditto -x -k` unpacks the zip preserving the code signature,
@@ -250,38 +287,81 @@ mod imp {
             .map(|s| s.success())
             .unwrap_or(false);
         if !unpacked || !extracted.exists() {
-            let _ = std::fs::remove_dir_all(&staging);
+            let _ = fs::remove_dir_all(&staging);
             return false;
         }
-        // Verify the downloaded bundle's code identity BEFORE replacing the
-        // installed app. A checksum proves integrity, not authenticity, so
-        // this requires a strict signature, a passing Gatekeeper assessment
-        // (notarization), and a validly signed nested helper. A download
-        // that fails any of these is never swapped in; the caller then
-        // falls back to the release page for a manual, Gatekeeper-checked
-        // install.
-        if !verify_bundle(&extracted) {
-            tracing::warn!("update failed signature/notarization check; not installing");
-            let _ = std::fs::remove_dir_all(&staging);
+
+        // Step 2: authenticated code identity of the candidate. A checksum
+        // proves integrity, not authenticity, so this requires a strict
+        // signature, a passing Gatekeeper assessment (notarization), and a
+        // validly signed nested helper.
+        let candidate_ok = verify_bundle(&extracted);
+
+        // Step 3: verified stop of the active session BEFORE replacing the
+        // bundle that carries the registered helper. If normal sleep cannot
+        // be confirmed restored, do not proceed. (This whole module is the
+        // non-App-Store build, so the lid coordinator is always present here.)
+        let session_restored = crate::lid::end_verified();
+
+        if plan_update(candidate_ok, session_restored, true) == UpdatePlan::AbortBeforeSwap {
+            if !candidate_ok {
+                tracing::warn!("update failed signature/notarization check; not installing");
+            }
+            if !session_restored {
+                tracing::warn!(
+                    "update aborted: could not confirm the active session restored; \
+                     not replacing the helper bundle"
+                );
+            }
+            let _ = fs::remove_dir_all(&staging);
             return false;
         }
-        // Move the current bundle aside, then move the new one in.
-        let _ = std::fs::remove_dir_all(&old);
-        if std::fs::rename(&bundle, &old).is_err() {
-            let _ = std::fs::remove_dir_all(&staging);
+
+        // Step 4: move the current bundle aside (kept as rollback), then move
+        // the new one in. Same-directory renames are atomic.
+        let _ = fs::remove_dir_all(&old);
+        if fs::rename(&bundle, &old).is_err() {
+            let _ = fs::remove_dir_all(&staging);
             return false;
         }
-        if std::fs::rename(&extracted, &bundle).is_err() {
+        if fs::rename(&extracted, &bundle).is_err() {
             // Put the old bundle back so we never leave the app missing.
-            let _ = std::fs::rename(&old, &bundle);
-            let _ = std::fs::remove_dir_all(&staging);
+            let _ = fs::rename(&old, &bundle);
+            let _ = fs::remove_dir_all(&staging);
             return false;
         }
-        // Best-effort cleanup. Deleting the old bundle while this process
-        // still runs is fine on macOS - the live binary keeps its inode.
-        let _ = std::fs::remove_dir_all(&old);
-        let _ = std::fs::remove_dir_all(&staging);
-        true
+
+        // Step 5: verify the newly installed app/helper at its final path,
+        // BEFORE discarding the rollback.
+        let installed_ok = verify_bundle(&bundle);
+        match plan_update(candidate_ok, session_restored, installed_ok) {
+            UpdatePlan::Commit => {
+                // Step 6: healthy, so it is safe to drop the rollback. A
+                // failed cleanup here is non-fatal (the live binary keeps its
+                // inode) but is logged, never silently ignored.
+                if fs::remove_dir_all(&old).is_err() {
+                    tracing::warn!("update healthy but could not remove the previous bundle");
+                }
+                let _ = fs::remove_dir_all(&staging);
+                true
+            }
+            UpdatePlan::RollbackAfterSwap => {
+                // The installed app/helper did not verify: restore the
+                // retained previous bundle and report failure.
+                let _ = fs::remove_dir_all(&bundle);
+                let _ = fs::rename(&old, &bundle);
+                let _ = fs::remove_dir_all(&staging);
+                tracing::warn!(
+                    "installed bundle failed verification; rolled back to the previous version"
+                );
+                false
+            }
+            // AbortBeforeSwap was already handled before any swap.
+            UpdatePlan::AbortBeforeSwap => {
+                let _ = fs::remove_dir_all(&staging);
+                false
+            }
+        }
     }
 
     /// Whether a shell command exited 0.
@@ -317,19 +397,15 @@ mod imp {
         strict && gatekeeper && helper_ok
     }
 
-    /// Launch the freshly-swapped bundle and exit this (old) process so
-    /// the user lands on the new version. Called only after a successful
-    /// `swap_bundle`, so the bundle path still resolves.
+    /// Launch the freshly-installed bundle and exit this (old) process so the
+    /// user lands on the new version. Called only after a successful
+    /// `apply_update`, which has already performed the explicit, verified stop
+    /// of the active session (restoring normal sleep and releasing the lid
+    /// override) BEFORE the bundle was replaced. The relaunched app does not
+    /// auto-resume the session (klipa never resurrects one), so the user
+    /// restarts keep-awake deliberately after the update.
     #[cfg(target_os = "macos")]
     fn relaunch() -> ! {
-        // Update policy for an active session: an explicit, verified stop
-        // before replacement. Reconcile owned power state (restore normal
-        // sleep, release the lid override) BEFORE this detached thread
-        // exits, since `process::exit` runs no destructors. The relaunched
-        // app does not auto-resume the session (klipa never resurrects one),
-        // so the user restarts keep-awake deliberately after the update.
-        #[cfg(not(feature = "mas"))]
-        crate::lid::end();
         if let Some(bundle) = app_bundle_path() {
             let _ = std::process::Command::new("open")
                 .arg("-n")
@@ -390,6 +466,38 @@ mod imp {
             assert_eq!(triple("1.2"), (1, 2, 0));
             assert_eq!(triple("1.2.3"), (1, 2, 3));
             assert_eq!(triple("bogus"), (0, 0, 0));
+        }
+
+        #[test]
+        fn update_never_swaps_before_candidate_and_session_are_good() {
+            // The candidate must verify first.
+            assert_eq!(
+                plan_update(false, true, true),
+                UpdatePlan::AbortBeforeSwap,
+                "an unverified candidate is never installed"
+            );
+            // Regression for the ordering bug: the active session must be
+            // confirmed restored BEFORE the helper-containing bundle is
+            // replaced. A session that could not be restored aborts the
+            // update rather than silently proceeding.
+            assert_eq!(
+                plan_update(true, false, true),
+                UpdatePlan::AbortBeforeSwap,
+                "an unrestored session blocks the swap"
+            );
+            assert_eq!(plan_update(false, false, true), UpdatePlan::AbortBeforeSwap);
+        }
+
+        #[test]
+        fn update_keeps_rollback_until_the_installed_app_is_healthy() {
+            // Swapped, but the installed app/helper did not verify: roll back
+            // to the retained previous bundle instead of committing.
+            assert_eq!(
+                plan_update(true, true, false),
+                UpdatePlan::RollbackAfterSwap
+            );
+            // All three checks pass: commit and drop the rollback.
+            assert_eq!(plan_update(true, true, true), UpdatePlan::Commit);
         }
     }
 }

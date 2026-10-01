@@ -122,6 +122,12 @@ pub struct Journal {
 
 pub const JOURNAL_SCHEMA: u32 = 1;
 
+/// How long to wait between autonomous retries of a restore that could not be
+/// confirmed. Short enough that normal sleep comes back quickly once the
+/// system is readable again, bounded so a persistently unreadable `pmset`
+/// does not turn into a per-tick `pmset` storm.
+pub const RESTORE_RETRY_BACKOFF_SECS: u64 = 15;
+
 // ── Pure decisions (unit-tested without any OS) ──────────────────────
 
 /// The effective state to report, from the raw flag and whether the daemon
@@ -234,6 +240,23 @@ struct State {
     lease_deadline_epoch: u64,
     session_deadline_epoch: Option<u64>,
     active: bool,
+    /// Set when a restore ran but could not be confirmed. The daemon keeps
+    /// the durable record and `tick` retries at or after this epoch, so a
+    /// transient failure recovers on its own without restarting the app or
+    /// the daemon. `None` means nothing is owed.
+    restore_owed_after_epoch: Option<u64>,
+}
+
+/// The result of a restore attempt, so the caller (End vs the autonomous
+/// tick) can report an unconfirmed restore honestly instead of claiming the
+/// override is gone.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+enum RestoreOutcome {
+    /// Normal sleep is confirmed back (or the flag was never ours to clear).
+    Confirmed,
+    /// The restore ran but could not be confirmed; the record is kept and a
+    /// retry is owed.
+    Owed,
 }
 
 pub struct OverrideManager<S: System, J: JournalStore> {
@@ -325,6 +348,7 @@ impl<S: System, J: JournalStore> OverrideManager<S, J> {
             lease_deadline_epoch: j.lease_deadline_epoch,
             session_deadline_epoch: j.session_deadline_epoch,
             active: true,
+            restore_owed_after_epoch: None,
         };
     }
 
@@ -420,6 +444,7 @@ impl<S: System, J: JournalStore> OverrideManager<S, J> {
                             lease_deadline_epoch: lease_deadline,
                             session_deadline_epoch: session_deadline,
                             active: true,
+                            restore_owed_after_epoch: None,
                         };
                         self.ok_response()
                     }
@@ -475,9 +500,24 @@ impl<S: System, J: JournalStore> OverrideManager<S, J> {
             return self.err_response(ErrorReason::NotOwner, "another user owns the override");
         }
         match owner_check(self.state.generation, gen) {
-            OwnerCheck::Owner if self.owns_active() => {
-                self.restore_and_reconcile(self.state.prior_disabled);
-                self.ok_response()
+            // Accept an End from the owner when the session is active OR when a
+            // restore is still owed from a prior unconfirmed attempt, so an
+            // explicit client retry re-runs the restore instead of being told
+            // the already-torn-down session is simply gone.
+            OwnerCheck::Owner
+                if self.owns_active() || self.state.restore_owed_after_epoch.is_some() =>
+            {
+                match self.restore_and_reconcile(self.state.prior_disabled) {
+                    RestoreOutcome::Confirmed => self.ok_response(),
+                    // The restore ran but could not be confirmed. Tell the
+                    // client honestly so it keeps a restoration-failed state
+                    // and an accessible retry; the daemon also retries on its
+                    // own via `tick`.
+                    RestoreOutcome::Owed => self.err_response(
+                        ErrorReason::RestoreUnconfirmed,
+                        "ran the restore but could not confirm normal sleep; retrying",
+                    ),
+                }
             }
             OwnerCheck::Stale => self.err_response(
                 ErrorReason::StaleGeneration,
@@ -502,24 +542,49 @@ impl<S: System, J: JournalStore> OverrideManager<S, J> {
     }
 
     /// The periodic monitor tick: restore autonomously when the lease has
-    /// lapsed or the session deadline is reached. The daemon calls this on
-    /// a timer thread, so expiry is owned by the daemon, not any client.
-    /// Returns true if it restored.
+    /// lapsed or the session deadline is reached, AND retry a restore that
+    /// previously could not be confirmed. The daemon calls this on a timer
+    /// thread, so both expiry and restore-retry are owned by the daemon, not
+    /// any client: a transient restore failure recovers on its own without
+    /// restarting the app or the daemon. Returns true if it acted.
     pub fn tick(&mut self) -> bool {
+        let now = self.sys.now_epoch();
+        // A previously-unconfirmed restore is owed: retry it (with backoff) no
+        // matter that the session is no longer `active`. This is the case the
+        // old code could not recover from, because it skipped any session that
+        // was not active and left the owed restore stranded until a restart.
+        if let Some(after) = self.state.restore_owed_after_epoch {
+            if now >= after {
+                self.restore_and_reconcile(self.state.prior_disabled);
+                return true;
+            }
+            // Owed but still backing off: nothing else to do this tick.
+            return false;
+        }
         if !self.owns_active() {
             return false;
         }
-        let now = self.sys.now_epoch();
         if expiry_due(
             now,
             self.state.lease_deadline_epoch,
             self.state.session_deadline_epoch,
         ) {
             self.restore_and_reconcile(self.state.prior_disabled);
-            true
-        } else {
-            false
+            return true;
         }
+        // Still active and not expired: make sure the override is actually in
+        // effect. A power-source/charger transition (a documented Apple
+        // Silicon closed-display hazard) or an external tool can clear
+        // `disablesleep` out from under an active session; reassert our owned
+        // override so protection is not silently lost. Bounded: at most one
+        // `pmset` write per tick, only while we own an active session and only
+        // when the flag has actually slipped off.
+        if self.sys.read_flag() == SleepFlag::Enabled
+            && self.sys.set_flag(true) == SetOutcome::Applied
+        {
+            return true;
+        }
+        false
     }
 
     /// Roll back a failed acquire without re-prompting: only touch the flag
@@ -530,7 +595,9 @@ impl<S: System, J: JournalStore> OverrideManager<S, J> {
                 self.journal.clear();
                 self.state = State::default();
             }
-            SleepFlag::Disabled => self.restore_and_reconcile(prior),
+            SleepFlag::Disabled => {
+                let _ = self.restore_and_reconcile(prior);
+            }
             SleepFlag::Unknown => {
                 // Ambiguous: keep the journal for startup recovery rather
                 // than acting blind.
@@ -540,8 +607,11 @@ impl<S: System, J: JournalStore> OverrideManager<S, J> {
     }
 
     /// Restore the owned override and reconcile the journal against a
-    /// verified readback. Clears the record only on a confirmed restore.
-    fn restore_and_reconcile(&mut self, prior: Option<bool>) {
+    /// verified readback. Clears the record only on a confirmed restore; an
+    /// unconfirmed restore keeps the record, schedules an autonomous retry,
+    /// and reports [`RestoreOutcome::Owed`] so the caller does not claim the
+    /// override is gone.
+    fn restore_and_reconcile(&mut self, prior: Option<bool>) -> RestoreOutcome {
         // Mark the phase so an interruption mid-restore is still recoverable.
         if let Some(mut j) = self.journal.load() {
             if j.phase != Phase::Restoring {
@@ -553,18 +623,25 @@ impl<S: System, J: JournalStore> OverrideManager<S, J> {
             // Prior was already disabled by something else: not ours.
             self.journal.clear();
             self.state = State::default();
-            return;
+            return RestoreOutcome::Confirmed;
         }
         let _ = self.sys.set_flag(false);
         match restore_action(prior, self.sys.read_flag()) {
             RestoreAction::Clear | RestoreAction::LeaveFlag => {
                 self.journal.clear();
                 self.state = State::default();
+                RestoreOutcome::Confirmed
             }
             RestoreAction::Retain => {
-                // Keep the record; drop the in-memory active flag so we do
-                // not claim ownership, but leave the journal for retry.
+                // Keep the record and the prior value / owning generation so a
+                // retry restores to the right value, but drop the active flag
+                // so we do not claim ownership. Schedule the next autonomous
+                // retry so `tick` finishes the job on its own.
+                let now = self.sys.now_epoch();
                 self.state.active = false;
+                self.state.restore_owed_after_epoch =
+                    Some(now.saturating_add(RESTORE_RETRY_BACKOFF_SECS));
+                RestoreOutcome::Owed
             }
         }
     }
@@ -863,6 +940,87 @@ mod tests {
             j.present(),
             "an unconfirmed restore keeps the record for retry"
         );
+    }
+
+    #[test]
+    fn an_owned_override_that_slips_off_is_reasserted() {
+        // A charger/power-source transition (or an external tool) clears the
+        // flag mid-session; the daemon reasserts its owned override on the
+        // next tick rather than silently losing protection.
+        let sys = FakeSys::new();
+        let j = FakeJournal::default();
+        let mut m = mgr(sys.clone(), j.clone());
+        m.handle(&begin(1, 90, None), 501); // now=1000, lease@1090
+        assert_eq!(sys.flag(), SleepFlag::Disabled);
+        sys.0.borrow_mut().flag = SleepFlag::Enabled; // slipped off externally
+        assert!(m.tick(), "tick reasserted the owned override");
+        assert_eq!(
+            sys.flag(),
+            SleepFlag::Disabled,
+            "protection reasserted, not lost"
+        );
+        assert!(j.present(), "still owned");
+        // A healthy flag needs no action.
+        assert!(
+            !m.tick(),
+            "nothing to do when the override is still in effect"
+        );
+    }
+
+    #[test]
+    fn a_failed_restore_is_retried_autonomously_without_a_restart() {
+        // Regression: a restore that could not be confirmed used to mark the
+        // session inactive, and `tick` skipped inactive sessions, so the owed
+        // restore was stranded until the app or daemon restarted. It must now
+        // recover on its own.
+        let sys = FakeSys::new();
+        let j = FakeJournal::default();
+        let mut m = mgr(sys.clone(), j.clone());
+        m.handle(&begin(1, 90, None), 501); // now=1000, lease@1090
+        sys.set_now(1091);
+        sys.force_next_set_false(SetOutcome::Refused); // transient: unreadable
+        assert!(m.tick(), "tick acted on the lapsed lease");
+        assert!(j.present(), "an unconfirmed restore keeps the record");
+        assert_ne!(sys.flag(), SleepFlag::Enabled, "sleep is not yet restored");
+
+        // Within the backoff window the daemon does not hammer pmset.
+        sys.set_now(1095);
+        assert!(!m.tick(), "still backing off; no retry yet");
+
+        // After the backoff the daemon retries on its own and now succeeds,
+        // with no app or daemon restart.
+        sys.set_now(1091 + RESTORE_RETRY_BACKOFF_SECS);
+        assert!(m.tick(), "retry fired");
+        assert_eq!(
+            sys.flag(),
+            SleepFlag::Enabled,
+            "normal sleep restored on the autonomous retry"
+        );
+        assert!(!j.present(), "record cleared after a confirmed restore");
+        sys.set_now(3000);
+        assert!(!m.tick(), "nothing left owed");
+    }
+
+    #[test]
+    fn end_reports_unconfirmed_restore_and_an_explicit_retry_recovers() {
+        let sys = FakeSys::new();
+        let j = FakeJournal::default();
+        let mut m = mgr(sys.clone(), j.clone());
+        m.handle(&begin(1, 90, None), 501);
+        sys.force_next_set_false(SetOutcome::Refused);
+        let r = m.handle(&Request::End { generation: 1 }, 501);
+        assert_eq!(
+            r.error,
+            Some(ErrorReason::RestoreUnconfirmed),
+            "End must not claim success when it could not confirm the restore"
+        );
+        assert!(j.present(), "the record is kept for retry");
+        // An explicit client retry with the same generation re-runs the
+        // restore even though the session is no longer active, and confirms.
+        let r = m.handle(&Request::End { generation: 1 }, 501);
+        assert!(r.is_ok());
+        assert_eq!(sys.flag(), SleepFlag::Enabled);
+        assert!(!j.present());
     }
 
     #[test]

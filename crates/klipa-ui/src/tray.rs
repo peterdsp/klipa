@@ -548,10 +548,24 @@ fn build_awake_submenu(awake: &AwakeView) -> Submenu {
         }
     }
     let _ = sub.append(&PredefinedMenuItem::separator());
+    // Always reachable when there is something to stop OR restore: an active
+    // session, or a lid override whose restore slipped / could not be
+    // confirmed. After trial expiry or activation failure the session may be
+    // gone while a restore is still owed, so this must not be gated on
+    // `active` alone.
+    let needs_restore = matches!(
+        awake.protection,
+        ProtectionState::DegradedRecovering | ProtectionState::RestorationFailed
+    );
+    let end_label = if awake.active {
+        "End current session"
+    } else {
+        "Restore normal sleep"
+    };
     let _ = sub.append(&MenuItem::with_id(
         AWAKE_END_ID,
-        "End current session",
-        awake.active,
+        end_label,
+        awake.active || needs_restore,
         None,
     ));
     // Always-available diagnostics, so a stuck or degraded state can be
