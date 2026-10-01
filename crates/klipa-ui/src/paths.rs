@@ -35,12 +35,24 @@ pub fn settings_file() -> Option<PathBuf> {
     data_dir().map(|d| d.join("settings.json"))
 }
 
-/// Sentinel written while a "keep awake with the lid closed" session has
-/// the system-wide `disablesleep` power flag set. Because that flag
-/// outlives a crash or force-quit, its presence at startup means a
-/// previous run left sleep disabled and we must restore it. macOS
-/// (non-App-Store) build only; harmless to compute elsewhere.
+/// Legacy sentinel (klipa <= 0.5.4): a bare boolean file written while a
+/// lid-closed session had `disablesleep` set. It carries no snapshot of
+/// the value to restore to, so on upgrade it is migrated as an
+/// ambiguous-ownership recovery rather than trusted for a prior value.
+/// macOS (non-App-Store) build only; harmless to compute elsewhere.
 #[cfg_attr(any(not(target_os = "macos"), feature = "mas"), allow(dead_code))]
 pub fn lid_awake_marker() -> Option<PathBuf> {
     data_dir().map(|d| d.join("lid_awake.on"))
+}
+
+/// Recovery journal for a lid-closed override. Because `disablesleep`
+/// outlives a crash, a force-quit, or a reboot, this records the value
+/// observed before klipa changed it (so the exact prior value is
+/// restored, not a blind zero) and the boot session it belongs to. Its
+/// presence at startup means a restore may still be owed, and it is
+/// removed only after a restore is verified. macOS (non-App-Store) build
+/// only; harmless to compute elsewhere.
+#[cfg_attr(any(not(target_os = "macos"), feature = "mas"), allow(dead_code))]
+pub fn lid_awake_journal() -> Option<PathBuf> {
+    data_dir().map(|d| d.join("lid_awake.json"))
 }
