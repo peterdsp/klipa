@@ -677,9 +677,6 @@ mod platform {
     pub struct OsPower;
     pub struct Lock(Child);
 
-    /// No lid-closed flag is ever set off macOS, so nothing to recover.
-    pub fn recover_lid_closed() {}
-
     impl super::PowerSource for OsPower {
         fn engage(
             &self,
@@ -747,9 +744,6 @@ mod platform {
     pub struct OsPower;
     pub struct Lock;
 
-    /// No lid-closed flag is ever set off macOS, so nothing to recover.
-    pub fn recover_lid_closed() {}
-
     impl super::PowerSource for OsPower {
         fn engage(
             &self,
@@ -794,9 +788,6 @@ mod platform {
 
     pub struct OsPower;
     pub struct Lock;
-
-    /// No lid-closed flag is ever set off macOS, so nothing to recover.
-    pub fn recover_lid_closed() {}
 
     impl super::PowerSource for OsPower {
         fn engage(
