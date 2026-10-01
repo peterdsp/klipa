@@ -23,7 +23,12 @@ mod clamshell;
 #[cfg(all(target_os = "macos", not(feature = "mas")))]
 mod helper;
 mod http;
+// The macOS lid-closed override coordinator (helper + admin-prompt
+// fallback). Direct-download build only; the sandboxed App Store build
+// cannot change system sleep, so it omits this entirely.
 mod license;
+#[cfg(all(target_os = "macos", not(feature = "mas")))]
+mod lid;
 mod paths;
 mod platform;
 // The single native modal: "how long?" for a custom keep-awake session.
@@ -106,6 +111,19 @@ impl Klipa {
         // Sandbox-safe read of the current lid-close outcome (external
         // display / power), refreshed each rebuild so it tracks hotplug.
         awake.clamshell = clamshell::status();
+        // Fill the real, verified lid-closed protection state (and any
+        // specific failure) from the lid coordinator, so the menu reports
+        // effective behavior rather than inferring it from the session.
+        #[cfg(all(target_os = "macos", not(feature = "mas")))]
+        {
+            let desired = awake.active && awake.mode == awake::AwakeMode::LidClosed;
+            awake.protection = lid::protection(desired, awake.helper_needs_approval);
+            if awake.error.is_none() {
+                if let Some(block) = lid::last_error() {
+                    awake.error = Some(awake::EngageErr::Lid(block));
+                }
+            }
+        }
         let notice = self.license.transient_message();
         let update = self.updater.menu_label();
 
@@ -180,11 +198,72 @@ impl Klipa {
             self.settings.awake_mode = adopted;
             self.settings.save();
         }
+        self.reconcile_lid();
         // The native menu flips a check item's mark on click by itself.
         // Re-clicking the running mode changes nothing we hash, so force
         // a redraw or that item would be left unchecked.
         self.menu_sig = None;
         self.rebuild_menu();
+    }
+
+    /// Match the lid-closed override to the current session: engage it when
+    /// a lid session is active, update its remaining time in place on a
+    /// duration change (gap-free), and release it when the session ends or
+    /// the mode changes away. Called on session/mode edges only, never per
+    /// tick, so a failed start never becomes a prompt loop. The privileged
+    /// work happens off this thread (helper renewer) or in one bounded
+    /// call; the daemon owns expiry, so a frozen UI cannot strand it.
+    #[cfg(all(target_os = "macos", not(feature = "mas")))]
+    fn reconcile_lid(&mut self) {
+        let desired = self.awake.is_active() && self.awake.mode() == awake::AwakeMode::LidClosed;
+        let session_secs = self.awake.remaining_request().and_then(|d| match d {
+            awake::AwakeDuration::Indefinite => None,
+            awake::AwakeDuration::For(dur) => Some(dur.as_secs()),
+        });
+        if desired {
+            if lid::is_engaged() {
+                lid::update_session(session_secs);
+            } else {
+                lid::begin(session_secs);
+            }
+        } else if lid::is_engaged() {
+            lid::end();
+        }
+    }
+
+    #[cfg(not(all(target_os = "macos", not(feature = "mas"))))]
+    fn reconcile_lid(&mut self) {}
+
+    /// A short diagnostics summary for the "Copy diagnostics" action:
+    /// app/helper/power/session state only, with no clipboard contents,
+    /// credentials, or unnecessary identifying data.
+    fn diagnostics(&self) -> String {
+        let v = self.awake.view();
+        let mut s = String::new();
+        s.push_str(&format!("klipa {}\n", env!("CARGO_PKG_VERSION")));
+        s.push_str(&format!("os: {}\n", std::env::consts::OS));
+        s.push_str(&format!("mode: {:?}\n", v.mode));
+        s.push_str(&format!("session: {}\n", v.status));
+        s.push_str(&format!("protection: {:?}\n", v.protection));
+        s.push_str(&format!("lid_supported: {}\n", v.lid_closed_supported));
+        s.push_str(&format!("clamshell: {:?}\n", v.clamshell));
+        if let Some(err) = v.error {
+            s.push_str(&format!("last_error: {err:?}\n"));
+        }
+        #[cfg(all(target_os = "macos", not(feature = "mas")))]
+        {
+            s.push_str(&format!("helper_state: {:?}\n", helper::state()));
+            match helper::status() {
+                Some(resp) => {
+                    s.push_str(&format!(
+                        "helper_version: {}\nprotocol: {}\neffective: {:?}\ngeneration: {}\n",
+                        resp.helper_version, resp.protocol, resp.effective, resp.generation
+                    ));
+                }
+                None => s.push_str("helper: not reachable\n"),
+            }
+        }
+        s
     }
 
     fn set_dropdown_items(&mut self, count: usize) {
@@ -222,6 +301,7 @@ impl ApplicationHandler for Klipa {
                     // while the app is still alive, rather than during
                     // teardown. No-op for a plain idle session.
                     self.awake.end();
+                    self.reconcile_lid();
                     event_loop.exit();
                     return;
                 }
@@ -250,6 +330,7 @@ impl ApplicationHandler for Klipa {
                 tray::UPDATE_ID => self.updater.trigger(),
                 tray::AWAKE_END_ID => {
                     self.awake.end();
+                    self.reconcile_lid();
                     self.rebuild_menu();
                 }
                 tray::AWAKE_MODE_SCREEN_ID => {
@@ -272,6 +353,14 @@ impl ApplicationHandler for Klipa {
                         self.settings.save();
                         self.awake
                             .start(awake::AwakeDuration::For(Duration::from_secs(minutes * 60)));
+                        self.reconcile_lid();
+                    }
+                    self.rebuild_menu();
+                }
+                tray::DIAG_ID => {
+                    let diag = self.diagnostics();
+                    if let Ok(mut cb) = arboard::Clipboard::new() {
+                        let _ = cb.set_text(diag);
                     }
                     self.rebuild_menu();
                 }
@@ -288,6 +377,7 @@ impl ApplicationHandler for Klipa {
                 other if tray::parse_awake_start(other).is_some() => {
                     let duration = tray::parse_awake_start(other).unwrap();
                     self.awake.start(duration);
+                    self.reconcile_lid();
                     self.rebuild_menu();
                 }
                 other => {
@@ -307,6 +397,12 @@ impl ApplicationHandler for Klipa {
         // keep the "X left" countdown label roughly fresh by rebuilding
         // about once a minute while a session is running.
         let awake_ended = self.awake.poll();
+        if awake_ended {
+            // A timed session elapsed: release the lid override to match.
+            // The daemon would also expire it on its own (it owns the
+            // deadline), so this is the belt to that braces.
+            self.reconcile_lid();
+        }
         // Only a *timed* session has a label that goes stale. An
         // indefinite one reads "Awake indefinitely" forever, so there is
         // nothing to refresh and no clock to imply.
@@ -394,6 +490,7 @@ fn menu_signature(
     awake.custom_minutes.hash(&mut h);
     awake.error.hash(&mut h);
     (awake.clamshell as u8).hash(&mut h);
+    (awake.protection as u8).hash(&mut h);
     awake.status.hash(&mut h);
     awake.detail.hash(&mut h);
     match gate {

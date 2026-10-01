@@ -5,7 +5,7 @@
 //! to the clipboard. No window, no GPU, no renderer - hence tiny.
 
 use crate::adapters::clipboard::{decode_png, read_image_png};
-use crate::awake::{AwakeDuration, AwakeMode, AwakeView, EngageErr, LidBlock};
+use crate::awake::{AwakeDuration, AwakeMode, AwakeView, EngageErr, LidBlock, ProtectionState};
 use crate::clamshell::ClamshellStatus;
 use crate::license::Gate;
 use crate::settings::MenubarDisplay;
@@ -40,6 +40,9 @@ pub const AWAKE_CUSTOM_ID: &str = "__klipa_awake_custom";
 pub const HELPER_INSTALL_ID: &str = "__klipa_helper_install";
 /// Remove the passwordless root helper.
 pub const HELPER_REMOVE_ID: &str = "__klipa_helper_remove";
+/// Copy a small diagnostics summary (app/helper/power state) to the
+/// clipboard, with no clipboard contents or credentials in it.
+pub const DIAG_ID: &str = "__klipa_diag";
 /// Prefix for "start a session of N seconds" items; 0 = indefinitely.
 pub const AWAKE_START_PREFIX: &str = "__klipa_awake_start:";
 /// Open the purchase page / activate with the buyer's license file.
@@ -185,10 +188,12 @@ impl Tray {
         update: Option<&str>,
         dropdown_items: usize,
     ) {
-        // Trial elapsed and unlicensed: show only the paywall.
+        // Trial elapsed and unlicensed: the paywall, but keep-awake control
+        // never disappears, an active session or a pending restoration must
+        // always be stoppable.
         if gate.is_locked() {
             self.icon
-                .set_menu(Some(Box::new(paywall_menu(price, notice))));
+                .set_menu(Some(Box::new(paywall_menu(price, notice, awake))));
             return;
         }
 
@@ -284,7 +289,9 @@ impl Tray {
 }
 
 /// The locked-state menu: trial over, history hidden, unlock + activate.
-fn paywall_menu(price: &str, notice: Option<&str>) -> Menu {
+/// Keep-awake stop/restore stays reachable so a licence lapse can never
+/// strand an active session or a pending restoration.
+fn paywall_menu(price: &str, notice: Option<&str>, awake: &AwakeView) -> Menu {
     let menu = Menu::new();
     let _ = menu.append(&MenuItem::new("klipa - free trial ended", false, None));
     let _ = menu.append(&PredefinedMenuItem::separator());
@@ -303,6 +310,27 @@ fn paywall_menu(price: &str, notice: Option<&str>) -> Menu {
     if let Some(msg) = notice {
         let _ = menu.append(&MenuItem::new(msg, false, None));
     }
+
+    // A running session, or a lid override that still owes a restore, must
+    // remain stoppable even behind the paywall.
+    let needs_restore = !matches!(
+        awake.protection,
+        ProtectionState::Inactive | ProtectionState::Active
+    );
+    if awake.active || needs_restore {
+        let _ = menu.append(&PredefinedMenuItem::separator());
+        if let Some(line) = lid_line(awake) {
+            let _ = menu.append(&MenuItem::new(line, false, None));
+        }
+        let _ = menu.append(&MenuItem::with_id(
+            AWAKE_END_ID,
+            "End keep-awake / restore normal sleep",
+            true,
+            None,
+        ));
+        let _ = menu.append(&MenuItem::with_id(DIAG_ID, "Copy diagnostics", true, None));
+    }
+
     let _ = menu.append(&PredefinedMenuItem::separator());
     let _ = menu.append(&MenuItem::with_id(QUIT_ID, "Quit klipa", true, None));
     menu
@@ -379,6 +407,28 @@ fn lid_line(awake: &AwakeView) -> Option<&'static str> {
     }
 }
 
+/// A line describing the verified lid-closed protection state, for the
+/// non-error transient and degraded cases (hard failures are named by
+/// `lid_line` from `awake.error`). `None` when there is nothing extra to
+/// say beyond the normal status/outlook lines.
+fn protection_label(p: ProtectionState) -> Option<&'static str> {
+    match p {
+        ProtectionState::Preparing => Some("Lid closed: starting..."),
+        ProtectionState::AwaitingApproval => {
+            Some("Lid closed: approve the helper in System Settings")
+        }
+        ProtectionState::Verifying => Some("Lid closed: verifying..."),
+        ProtectionState::DegradedRecovering => Some("Lid closed: protection slipped, recovering"),
+        ProtectionState::Restoring => Some("Lid closed: restoring normal sleep..."),
+        ProtectionState::RestorationFailed => {
+            Some("Lid closed: could not confirm, see Copy diagnostics")
+        }
+        // Inactive and a verified Active need no extra line: the status and
+        // lid-outlook lines already say it.
+        ProtectionState::Inactive | ProtectionState::Active => None,
+    }
+}
+
 /// Build the "Keep awake" submenu: the live status, the three modes, the
 /// duration presets, the lid-close outlook, and an end action.
 fn build_awake_submenu(awake: &AwakeView) -> Submenu {
@@ -413,6 +463,12 @@ fn build_awake_submenu(awake: &AwakeView) -> Submenu {
     if let Some(line) = lid_line(awake) {
         let _ = sub.append(&MenuItem::new(line, false, None));
         let _ = sub.append(&PredefinedMenuItem::separator());
+    }
+
+    // The verified protection state (transient / degraded / needs-attention
+    // cases the outlook line above does not already name).
+    if let Some(line) = protection_label(awake.protection) {
+        let _ = sub.append(&MenuItem::new(line, false, None));
     }
 
     // The modes. Exactly one applies, so they are drawn as a radio group:
@@ -498,6 +554,9 @@ fn build_awake_submenu(awake: &AwakeView) -> Submenu {
         awake.active,
         None,
     ));
+    // Always-available diagnostics, so a stuck or degraded state can be
+    // reported without clipboard contents or credentials.
+    let _ = sub.append(&MenuItem::with_id(DIAG_ID, "Copy diagnostics", true, None));
     sub
 }
 

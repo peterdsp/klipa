@@ -1236,7 +1236,7 @@ dependencies = [
 
 [[package]]
 name = "klipa-core"
-version = "0.5.4"
+version = "0.6.0"
 dependencies = [
  "async-lock",
  "async-trait",
@@ -1251,11 +1251,24 @@ dependencies = [
 
 [[package]]
 name = "klipa-helper"
-version = "0.5.4"
+version = "0.6.0"
+dependencies = [
+ "klipa-ipc",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "klipa-ipc"
+version = "0.6.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
 
 [[package]]
 name = "klipa-ui"
-version = "0.5.4"
+version = "0.6.0"
 dependencies = [
  "active-win-pos-rs",
  "arboard",
@@ -1265,6 +1278,7 @@ dependencies = [
  "ed25519-compact",
  "keyring",
  "klipa-core",
+ "klipa-ipc",
  "objc2 0.5.2",
  "objc2-app-kit 0.2.2",
  "objc2-foundation 0.2.2",

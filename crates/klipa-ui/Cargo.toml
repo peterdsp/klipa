@@ -43,6 +43,10 @@ winresource = "0.1"
 [dependencies]
 klipa-core = { path = "../klipa-core" }
 serde = { workspace = true }
+# Shared, versioned protocol for talking to the privileged helper. Used
+# only by the macOS direct build (helper.rs), but harmless to depend on
+# everywhere; it is a tiny pure crate.
+klipa-ipc = { path = "../klipa-ipc" }
 serde_json = "1"
 thiserror = { workspace = true }
 tokio = { workspace = true }

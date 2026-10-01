@@ -114,7 +114,7 @@ impl AwakeMode {
 ///
 /// Off macOS these are never constructed (lid-closed is macOS-only), so the
 /// variants read as dead code there; they are real where it matters.
-#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+#[cfg_attr(any(not(target_os = "macos"), feature = "mas"), allow(dead_code))]
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub enum LidBlock {
     /// The admin password prompt was cancelled by the user.
@@ -133,7 +133,7 @@ pub enum LidBlock {
 /// Either way the session is *not* started: `KeepAwake` holds no lock and
 /// reports `active == false`, so the UI never shows a session that the OS
 /// declined.
-#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+#[cfg_attr(any(not(target_os = "macos"), feature = "mas"), allow(dead_code))]
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub enum EngageErr {
     /// The base OS wake lock (IOKit assertion / execution state /
@@ -144,101 +144,39 @@ pub enum EngageErr {
     Lid(LidBlock),
 }
 
-// ── The disablesleep flag: honest reads and owned restoration ─────────
-//
-// The lid-closed override is the one piece of klipa's state that outlives
-// the process: `pmset disablesleep 1` persists across quit, crash, and
-// reboot. Getting its read and its restore wrong is what leaves a Mac
-// unable to sleep, so the logic below is deliberately split out, kept
-// tri-state, and exercised by pure unit tests on every platform.
-
-/// Tri-state reading of the system `disablesleep` flag.
-///
-/// Collapsing an unreadable or errored read into a plain `false` is how a
-/// stuck override gets mistaken for a successful restore, so the three
-/// cases are kept apart. `Unknown` is never, on its own, treated as proof
-/// of either a disabled or an enabled machine.
-#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub enum SleepFlag {
-    /// `SleepDisabled 1`: the machine will not sleep (an override is in
-    /// effect, klipa's or another tool's).
-    Disabled,
-    /// `SleepDisabled 0`: ordinary sleep behavior.
-    Enabled,
-    /// `pmset` could not be run, exited non-zero, or the field was absent.
-    Unknown,
-}
-
-/// Parse the `SleepDisabled` value out of `pmset -g` output. Pure, so it
-/// is tested directly against real and malformed samples. A missing field
-/// or an unexpected value is `Unknown`, never silently `Enabled`.
-#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
-fn parse_sleep_flag(pmset_g_stdout: &str) -> SleepFlag {
-    for line in pmset_g_stdout.lines() {
-        let line = line.trim();
-        if let Some(rest) = line.strip_prefix("SleepDisabled") {
-            return match rest.split_whitespace().next() {
-                Some("1") => SleepFlag::Disabled,
-                Some("0") => SleepFlag::Enabled,
-                _ => SleepFlag::Unknown,
-            };
-        }
-    }
-    SleepFlag::Unknown
-}
-
-/// What to do with the recovery journal after attempting to restore
-/// `disablesleep`, given the value observed *before* klipa changed it and
-/// the value read back *after* the restore attempt. Pure decision, so the
-/// "never lose the evidence of an owed restore" rule is unit-tested.
-#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
-enum RestoreStep {
-    /// klipa never owned the disabled state (it was already disabled by
-    /// the user or another tool before klipa engaged): leave the flag
-    /// untouched and drop the journal. This is what stops klipa blindly
-    /// resetting someone else's `disablesleep=1` to zero.
-    LeaveFlag,
-    /// Restoration is confirmed (`Enabled`): drop the journal.
-    Clear,
-    /// Restoration is not confirmed (still `Disabled`, or `Unknown`): keep
-    /// the journal so the next launch retries, rather than clearing the
-    /// one piece of evidence that a restore is still owed.
-    Retain,
-}
-
-#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
-fn restore_step(prior_disabled: Option<bool>, readback: SleepFlag) -> RestoreStep {
-    match prior_disabled {
-        Some(true) => RestoreStep::LeaveFlag,
-        // We owned the override (prior was enabled), or ownership was
-        // ambiguous (`None`, an unreadable prior or a migrated legacy
-        // marker): only a confirmed `Enabled` readback lets us drop the
-        // journal.
-        Some(false) | None => match readback {
-            SleepFlag::Enabled => RestoreStep::Clear,
-            SleepFlag::Disabled | SleepFlag::Unknown => RestoreStep::Retain,
-        },
-    }
-}
-
-/// The prior value to record when starting (or re-engaging) a lid-closed
-/// override, given any value an existing journal already holds and the
-/// flag read now. An existing journal always wins: it preserves ownership
-/// across a mode change, a duration change, or a restart, so a healthy
-/// override klipa already owns is never reclassified as "someone else's"
-/// and stranded. Pure, so the ownership rule is unit-tested.
-#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
-fn prior_to_record(existing: Option<Option<bool>>, readback: SleepFlag) -> Option<bool> {
-    if let Some(prior) = existing {
-        return prior;
-    }
-    match readback {
-        SleepFlag::Disabled => Some(true),
-        SleepFlag::Enabled => Some(false),
-        SleepFlag::Unknown => None,
-    }
+/// The effective protection state shown in the menu, distinguishing a
+/// preference from verified behavior. The non-lid modes only ever reach
+/// `Inactive` or `Active` (an IOKit assertion either holds or it does not);
+/// the richer states describe the lid-closed override, whose real state the
+/// composition root reads from the helper (or the system flag) rather than
+/// inferring from an in-memory session. The actual `disablesleep` read and
+/// restore logic lives in `lid.rs`.
+#[cfg_attr(any(not(target_os = "macos"), feature = "mas"), allow(dead_code))]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+pub enum ProtectionState {
+    /// No session, or nothing requested.
+    Inactive,
+    /// Requested; acquiring the override.
+    Preparing,
+    /// Requested; waiting for the user to approve the helper in Settings
+    /// (or re-authorize after a cancelled prompt).
+    AwaitingApproval,
+    /// Acquired; confirming the system actually reflects it.
+    Verifying,
+    /// Verified: the system is genuinely held as requested.
+    Active,
+    /// Was active but the effective state slipped (e.g. the flag read back
+    /// off); recovery is owed.
+    DegradedRecovering,
+    /// Ending: restoring the prior settings. Reserved for a future
+    /// asynchronous restore; the current restore completes synchronously
+    /// before the menu redraws, so this is defined for completeness of the
+    /// model but not surfaced on its own.
+    #[allow(dead_code)]
+    Restoring,
+    /// A restore could not be confirmed, or a hard failure needs the user's
+    /// attention.
+    RestorationFailed,
 }
 
 // ── The OS seam ──────────────────────────────────────────────────────
@@ -347,6 +285,10 @@ pub struct AwakeView {
     /// Sandbox-safe and shown in every build; filled in by the
     /// composition root, so `view` defaults it to `Hidden`.
     pub clamshell: ClamshellStatus,
+    /// The effective, verified protection state for the current mode, read
+    /// from the real override/helper state by the composition root (which
+    /// owns the lid coordinator), so `view` defaults it to `Inactive`.
+    pub protection: ProtectionState,
 }
 
 impl KeepAwake {
@@ -486,8 +428,10 @@ impl KeepAwake {
 
     /// What to ask for when restarting the running session under a new
     /// mode: `Indefinite` stays `Indefinite`, a timed session keeps only
-    /// the time it has left. `None` when nothing is running.
-    fn remaining_request(&self) -> Option<AwakeDuration> {
+    /// the time it has left. `None` when nothing is running. Also used by
+    /// the composition root to drive the lid override's remaining session
+    /// time (so the daemon owns the correct expiry).
+    pub fn remaining_request(&self) -> Option<AwakeDuration> {
         let session = self.session.as_ref()?;
         Some(match session.duration {
             AwakeDuration::Indefinite => AwakeDuration::Indefinite,
@@ -537,17 +481,26 @@ impl KeepAwake {
             helper_installable: false,
             custom_minutes: None,
             clamshell: ClamshellStatus::Hidden,
+            protection: if self.is_active() {
+                ProtectionState::Active
+            } else {
+                ProtectionState::Inactive
+            },
         }
     }
 }
 
 /// Restore normal sleep if a previous "keep awake with lid closed"
 /// session left the system `disablesleep` flag set after an unclean exit
-/// (crash, force-quit, power loss). Call once at startup. No-op except on
-/// the non-App-Store macOS build, and even there it only prompts when the
-/// flag is genuinely still set.
+/// (crash, force-quit, power loss). Call once at startup.
+///
+/// The admin-prompt (Option A) path is reconciled here from the app-side
+/// journal (see `lid.rs`). The helper path's override is reconciled by the
+/// privileged daemon itself, which owns its own root journal and lease, so
+/// the app does not (and cannot) touch it. No-op off macOS.
 pub fn recover_lid_closed() {
-    platform::recover_lid_closed();
+    #[cfg(all(target_os = "macos", not(feature = "mas")))]
+    crate::lid::recover();
 }
 
 /// Compact "1h05m" / "9m" / "<1m" label for the remaining time.
@@ -568,41 +521,35 @@ fn fmt_remaining(d: Duration) -> String {
 // whose `Lock` holds the OS wake lock and releases it on `Drop`.
 
 /// macOS: keep awake via an IOKit power-management assertion. This is the
-/// public API that `caffeinate` itself wraps, called in-process so the
-/// idle keep-awake works inside the App Sandbox with no subprocess and no
+/// public API that `caffeinate` itself wraps, called in-process so the idle
+/// keep-awake works inside the App Sandbox with no subprocess and no
 /// entitlements. The assertion is held for the life of the `Lock` and
 /// released on `Drop`. There is no OS-side timer (the simple assertion API
 /// has none), so timed sessions are ended by `KeepAwake::poll` via the
 /// deadline, exactly like the Windows backend.
 ///
-/// Lid-closed mode is layered on top in the non-App-Store build only: an
-/// assertion cannot override an explicit lid-close sleep, so the system
-/// `disablesleep` flag is set via `pmset` behind the OS admin prompt (see
-/// `set_disablesleep`). That path does spawn a subprocess and needs root,
-/// which is exactly why it is unavailable under the sandbox.
+/// Lid-closed mode takes the same system assertion as `SystemOnly` here;
+/// the privileged `disablesleep` override it also needs is owned separately
+/// by the lid coordinator (`lid.rs`) and the root daemon, not by this lock.
+/// Keeping the override out of the lock is what lets a duration or mode
+/// change update it in place instead of dropping and re-taking it.
 #[cfg(target_os = "macos")]
 mod platform {
-    use super::{
-        parse_sleep_flag, prior_to_record, restore_step, AwakeDuration, AwakeMode, Duration,
-        EngageErr, LidBlock, RestoreStep, SleepFlag, WakeLock,
-    };
+    use super::{AwakeDuration, AwakeMode, EngageErr, WakeLock};
     use std::ffi::c_void;
 
     /// The production [`super::PowerSource`].
     pub struct OsPower;
 
-    /// A live keep-awake lock: the IOKit assertion, plus whether this
-    /// session also set the system `disablesleep` flag (lid-closed mode)
-    /// so `Drop` knows to restore it.
+    /// A live keep-awake lock: the IOKit assertion, released on `Drop`.
     pub struct Lock {
         assertion: u32,
-        disabled_sleep: bool,
     }
 
-    /// Only the non-App-Store build can honor lid-closed mode: it needs
-    /// to run `pmset` as root, which the App Sandbox forbids. In the
-    /// sandboxed (`mas`) build this is `false` and the whole lid-closed
-    /// path compiles to dead runtime branches.
+    /// Only the non-App-Store build can honor lid-closed mode: it needs a
+    /// privileged `disablesleep` change the App Sandbox forbids. In the
+    /// sandboxed (`mas`) build this is `false` and the lid-closed path is
+    /// inert (the menu hides the control).
     pub const LID_CLOSED_SUPPORTED: bool = !cfg!(feature = "mas");
 
     // kIOPMAssertionLevelOn.
@@ -645,327 +592,13 @@ mod platform {
     /// The single IOKit assertion type each mode needs, and no more.
     ///
     /// `kIOPMAssertionTypePreventUserIdleDisplaySleep` already implies the
-    /// system stays awake, so `ScreenAndSystem` does not also take a
-    /// system assertion: that would be a second assertion buying nothing.
-    /// The other two modes want the display free to power down, so they
-    /// take only `kIOPMAssertionTypePreventUserIdleSystemSleep`.
+    /// system stays awake, so `ScreenAndSystem` does not also take a system
+    /// assertion. The other two modes want the display free to power down,
+    /// so they take only `kIOPMAssertionTypePreventUserIdleSystemSleep`.
     fn assertion_type(mode: AwakeMode) -> &'static str {
         match mode {
             AwakeMode::ScreenAndSystem => "PreventUserIdleDisplaySleep",
             AwakeMode::SystemOnly | AwakeMode::LidClosed => "PreventUserIdleSystemSleep",
-        }
-    }
-    /// Flip the system-wide `disablesleep` power flag. Runs `pmset` as
-    /// root, the only lever that keeps the machine awake when the lid is
-    /// physically closed (a lid close is an explicit sleep request that no
-    /// power assertion overrides).
-    ///
-    /// Prefers the installed root helper (Option B): when it is registered,
-    /// approved, and listening, the toggle is passwordless. Otherwise falls
-    /// back to a one-off admin prompt (Option A), so the feature still
-    /// works before, or without ever, setting the helper up.
-    ///
-    /// Returns `Ok(())` only once the system genuinely reflects the change,
-    /// or a specific `LidBlock` explaining why it did not.
-    fn set_disablesleep(on: bool) -> Result<(), LidBlock> {
-        // Attempt the change: the passwordless helper first (when present),
-        // else the admin prompt. `prompt` records how the admin path went so
-        // a verification failure can be attributed correctly; the helper
-        // path leaves it at `Ok` (it either applied or the verify below
-        // catches it as a refusal).
-        #[allow(unused_assignments)]
-        let mut prompt = PromptResult::Ok;
-        #[cfg(not(feature = "mas"))]
-        {
-            if !crate::helper::set_disablesleep(on) {
-                prompt = set_disablesleep_prompt(on);
-            }
-        }
-        #[cfg(feature = "mas")]
-        {
-            prompt = set_disablesleep_prompt(on);
-        }
-        // Trust the real system state, not the exit code, but give it a
-        // moment: `pmset` hands the change to `powerd`, which applies it
-        // asynchronously, so an immediate read can still return the old
-        // value and look like a refusal that never happened. Poll briefly
-        // for the flag to actually flip before deciding.
-        let want = if on {
-            SleepFlag::Disabled
-        } else {
-            SleepFlag::Enabled
-        };
-        if wait_for_sleep_flag(want) {
-            return Ok(());
-        }
-        // It never took (or could not be read back). Name why: the user
-        // cancelled the prompt, the mechanism could not run at all, or the
-        // system silently overrode the change (a managed Mac's power
-        // policy). An `Unknown` readback is a refusal too: we never got
-        // confirmation the change applied, so we must not claim it did.
-        Err(match prompt {
-            PromptResult::Declined => LidBlock::Declined,
-            PromptResult::Unavailable => LidBlock::Unavailable,
-            PromptResult::Ok => LidBlock::Refused,
-        })
-    }
-
-    /// How the admin-prompt attempt resolved, so the caller can tell a user
-    /// cancellation apart from a mechanism failure or a silent refusal.
-    #[derive(Copy, Clone, PartialEq, Eq)]
-    enum PromptResult {
-        /// The command ran to completion (exit 0), or was not attempted.
-        Ok,
-        /// The user cancelled the admin-authentication dialog.
-        Declined,
-        /// `osascript`/`pmset` could not be run at all.
-        Unavailable,
-    }
-
-    /// Option A path: flip the flag through the standard macOS
-    /// admin-authentication dialog. `osascript ... with administrator
-    /// privileges` shows the OS's own password prompt: the user
-    /// authenticates to the system, not to klipa, and we never see or
-    /// handle the password.
-    fn set_disablesleep_prompt(on: bool) -> PromptResult {
-        let val = if on { "1" } else { "0" };
-        // `-a`: apply on both battery and charger, so the feature is not
-        // silently a no-op on battery. Heat/battery cost is surfaced in
-        // the UI/docs, mirroring how Amphetamine gates closed-lid mode.
-        let script = format!(
-            "do shell script \"/usr/bin/pmset -a disablesleep {val}\" \
-             with administrator privileges"
-        );
-        match std::process::Command::new("/usr/bin/osascript")
-            .arg("-e")
-            .arg(&script)
-            .output()
-        {
-            Ok(out) if out.status.success() => PromptResult::Ok,
-            Ok(out) => {
-                // A cancelled dialog surfaces as AppleScript error -128
-                // ("User canceled"); anything else is a genuine failure to
-                // run the change.
-                let stderr = String::from_utf8_lossy(&out.stderr);
-                if stderr.contains("-128") || stderr.contains("User canceled") {
-                    PromptResult::Declined
-                } else {
-                    tracing::warn!(%stderr, "pmset via osascript failed");
-                    PromptResult::Unavailable
-                }
-            }
-            Err(e) => {
-                tracing::warn!(?e, "pmset via osascript failed");
-                PromptResult::Unavailable
-            }
-        }
-    }
-
-    /// Poll `SleepDisabled` for up to ~2s, returning true as soon as it
-    /// matches `want`. `powerd` applies `disablesleep` asynchronously, so a
-    /// single read right after `pmset` returns can race the commit; this
-    /// closes that window without blocking for long when the change did
-    /// apply. A readback that never reaches `want` (including a persistent
-    /// `Unknown`) returns false: it is not confirmation.
-    fn wait_for_sleep_flag(want: SleepFlag) -> bool {
-        for _ in 0..20 {
-            if read_sleep_flag() == want {
-                return true;
-            }
-            std::thread::sleep(Duration::from_millis(100));
-        }
-        read_sleep_flag() == want
-    }
-
-    /// Read (no privileges needed) the current `disablesleep` flag as a
-    /// tri-state. A `pmset` that cannot run, exits non-zero, or omits the
-    /// field is `Unknown`, so an unreadable machine is never mistaken for a
-    /// restored one.
-    fn read_sleep_flag() -> SleepFlag {
-        match std::process::Command::new("/usr/bin/pmset")
-            .arg("-g")
-            .output()
-        {
-            Ok(out) if out.status.success() => {
-                parse_sleep_flag(&String::from_utf8_lossy(&out.stdout))
-            }
-            Ok(out) => {
-                tracing::warn!(code = ?out.status.code(), "pmset -g exited non-zero");
-                SleepFlag::Unknown
-            }
-            Err(e) => {
-                tracing::warn!(?e, "pmset -g could not run");
-                SleepFlag::Unknown
-            }
-        }
-    }
-
-    // ── Recovery journal ───────────────────────────────────────────────
-    //
-    // A tiny root-free JSON record of an owned override: the prior value
-    // to restore to, and the boot session it was written in. It is written
-    // *before* the flag is changed, and removed only after a restore is
-    // verified, so an unclean exit (crash, force-quit, power loss) always
-    // leaves enough evidence for the next launch to finish the job.
-
-    #[derive(serde::Serialize, serde::Deserialize)]
-    struct Journal {
-        /// Schema version, so a future field can be added without
-        /// misreading an old record.
-        schema: u32,
-        /// The `disablesleep` value observed before klipa changed it:
-        /// `Some(true)` = already disabled (klipa does not own the "on"),
-        /// `Some(false)` = normal (klipa owns the override),
-        /// `None` = unreadable at the time (ambiguous ownership).
-        prior_disabled: Option<bool>,
-        /// Boot session this record belongs to, so a stale record can be
-        /// told apart from one written in the current boot.
-        boot_id: String,
-    }
-
-    const JOURNAL_SCHEMA: u32 = 1;
-
-    /// The current boot session UUID (`kern.bootsessionuuid`), stable for
-    /// the life of a boot and empty only if the sysctl is unavailable.
-    fn boot_id() -> String {
-        std::process::Command::new("/usr/sbin/sysctl")
-            .args(["-n", "kern.bootsessionuuid"])
-            .output()
-            .ok()
-            .filter(|o| o.status.success())
-            .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
-            .unwrap_or_default()
-    }
-
-    /// Persist the journal before mutating the flag. Returns false if the
-    /// durable record could not be written, so the caller can refuse to
-    /// proceed rather than disable sleep with no way to recover it.
-    fn write_journal(prior_disabled: Option<bool>) -> bool {
-        let Some(path) = crate::paths::lid_awake_journal() else {
-            return false;
-        };
-        if let Some(dir) = path.parent() {
-            let _ = std::fs::create_dir_all(dir);
-        }
-        let record = Journal {
-            schema: JOURNAL_SCHEMA,
-            prior_disabled,
-            boot_id: boot_id(),
-        };
-        match serde_json::to_vec(&record) {
-            Ok(bytes) => std::fs::write(&path, bytes).is_ok(),
-            Err(_) => false,
-        }
-    }
-
-    /// Read the current journal, if any and if its schema is understood.
-    fn read_journal() -> Option<Journal> {
-        let path = crate::paths::lid_awake_journal()?;
-        let bytes = std::fs::read(&path).ok()?;
-        let record: Journal = serde_json::from_slice(&bytes).ok()?;
-        (record.schema == JOURNAL_SCHEMA).then_some(record)
-    }
-
-    fn remove_journal() {
-        if let Some(path) = crate::paths::lid_awake_journal() {
-            let _ = std::fs::remove_file(path);
-        }
-    }
-
-    fn remove_legacy_marker() {
-        if let Some(path) = crate::paths::lid_awake_marker() {
-            let _ = std::fs::remove_file(path);
-        }
-    }
-
-    /// Restore an override klipa owns, then reconcile the journal against
-    /// the result. Only a *verified* return to normal sleep clears the
-    /// journal; a failed or unreadable restore keeps it so the next launch
-    /// retries. `prior_disabled` is the ownership recorded at engage time
-    /// (or `None` for a migrated legacy marker).
-    fn restore_owned(prior_disabled: Option<bool>) {
-        // `Some(true)` means the flag was already disabled by something
-        // else before klipa engaged, so there is nothing of ours to undo:
-        // do not touch it, just drop our record.
-        if matches!(
-            restore_step(prior_disabled, SleepFlag::Unknown),
-            RestoreStep::LeaveFlag
-        ) {
-            remove_journal();
-            remove_legacy_marker();
-            return;
-        }
-        let _ = set_disablesleep(false);
-        match restore_step(prior_disabled, read_sleep_flag()) {
-            RestoreStep::Clear | RestoreStep::LeaveFlag => {
-                remove_journal();
-                remove_legacy_marker();
-            }
-            RestoreStep::Retain => {
-                tracing::warn!(
-                    "could not confirm system sleep was restored; keeping recovery journal for retry"
-                );
-            }
-        }
-    }
-
-    /// Undo a lid-closed engage that failed after its journal was written.
-    /// Avoids re-prompting on a plain decline: if the flag is still
-    /// `Enabled` the change never took, so the journal is simply dropped;
-    /// if it somehow read `Disabled` a verified restore runs; an `Unknown`
-    /// readback is left for startup recovery to reconcile rather than
-    /// prompting again now.
-    fn rollback_engage(prior_disabled: Option<bool>) {
-        match read_sleep_flag() {
-            SleepFlag::Enabled => {
-                remove_journal();
-                remove_legacy_marker();
-            }
-            SleepFlag::Disabled => restore_owned(prior_disabled),
-            SleepFlag::Unknown => {
-                tracing::warn!(
-                    "lid-closed engage failed with unreadable sleep state; keeping journal"
-                );
-            }
-        }
-    }
-
-    /// See `super::recover_lid_closed`. Reconciles any leftover override at
-    /// startup: a journal from this build, or a legacy `lid_awake.on`
-    /// marker from klipa <= 0.5.4 (migrated as ambiguous ownership, since
-    /// it holds no trustworthy prior value).
-    pub fn recover_lid_closed() {
-        if !LID_CLOSED_SUPPORTED {
-            return;
-        }
-        if let Some(record) = read_journal() {
-            // Only act if the machine is genuinely still disabled; a reboot
-            // that already cleared it just needs the record removed. An
-            // `Unknown` readback is treated as "might still be stuck", so
-            // we attempt the restore rather than walk away.
-            match read_sleep_flag() {
-                SleepFlag::Enabled => {
-                    remove_journal();
-                    remove_legacy_marker();
-                }
-                SleepFlag::Disabled | SleepFlag::Unknown => {
-                    tracing::warn!("lid-closed override outlived its session; restoring");
-                    restore_owned(record.prior_disabled);
-                }
-            }
-            return;
-        }
-        // No journal, but a legacy marker: migrate it. There is no
-        // trustworthy prior value in it, so ownership is ambiguous (`None`)
-        // and we restore to normal sleep only when the flag is really set.
-        if crate::paths::lid_awake_marker().is_some_and(|p| p.exists()) {
-            match read_sleep_flag() {
-                SleepFlag::Enabled => remove_legacy_marker(),
-                SleepFlag::Disabled | SleepFlag::Unknown => {
-                    tracing::warn!("legacy lid-awake marker present; restoring normal sleep");
-                    restore_owned(None);
-                }
-            }
         }
     }
 
@@ -975,7 +608,6 @@ mod platform {
             mode: AwakeMode,
             _duration: AwakeDuration,
         ) -> Result<Box<dyn WakeLock>, EngageErr> {
-            let lid = mode == AwakeMode::LidClosed && LID_CLOSED_SUPPORTED;
             let type_str = cfstr(assertion_type(mode));
             let name_str = cfstr("klipa keep awake");
             if type_str.is_null() || name_str.is_null() {
@@ -1006,47 +638,7 @@ mod platform {
                 tracing::warn!(rc, "IOPMAssertionCreateWithName failed");
                 return Err(EngageErr::Assertion);
             }
-
-            // Lid-closed mode: set the root power flag. If the user
-            // cancels the admin prompt (or it fails), don't start a
-            // half-on session that only survives an open lid, release the
-            // assertion and report the specific reason so the UI stays
-            // honest.
-            let mut disabled_sleep = false;
-            if lid {
-                // Record ownership durably *before* touching the flag.
-                // Preserve an existing journal's prior value so re-engaging
-                // (a mode or duration change during a live override) never
-                // reclassifies ownership. If the durable record cannot be
-                // written, refuse to disable sleep: there would be no
-                // trustworthy way to restore it.
-                let existing = read_journal().map(|j| j.prior_disabled);
-                let prior = prior_to_record(existing, read_sleep_flag());
-                if !write_journal(prior) {
-                    tracing::warn!("could not write lid-closed recovery journal; refusing");
-                    // SAFETY: releasing the assertion we just created.
-                    unsafe {
-                        IOPMAssertionRelease(id);
-                    }
-                    return Err(EngageErr::Lid(LidBlock::Unavailable));
-                }
-                match set_disablesleep(true) {
-                    Ok(()) => disabled_sleep = true,
-                    Err(reason) => {
-                        rollback_engage(prior);
-                        // SAFETY: releasing the assertion we just created.
-                        unsafe {
-                            IOPMAssertionRelease(id);
-                        }
-                        return Err(EngageErr::Lid(reason));
-                    }
-                }
-            }
-
-            Ok(Box::new(Lock {
-                assertion: id,
-                disabled_sleep,
-            }))
+            Ok(Box::new(Lock { assertion: id }))
         }
 
         fn supports_lid_closed(&self) -> bool {
@@ -1054,8 +646,8 @@ mod platform {
         }
     }
 
-    // No OS timer; the deadline in `KeepAwake` drives ending, so the
-    // default `finished` (always false) is correct here.
+    // No OS timer; the deadline in `KeepAwake` drives ending, so the default
+    // `finished` (always false) is correct here.
     impl WakeLock for Lock {}
 
     impl Drop for Lock {
@@ -1064,16 +656,6 @@ mod platform {
             let rc = unsafe { IOPMAssertionRelease(self.assertion) };
             if rc != 0 {
                 tracing::warn!(rc, "IOPMAssertionRelease failed");
-            }
-            // Restore normal sleep if we disabled it, and reconcile the
-            // journal against a verified readback. `main` ends the session
-            // before quitting so any Option A prompt lands while the app is
-            // still alive; the journal covers any exit that skips this.
-            if self.disabled_sleep {
-                let prior = read_journal()
-                    .map(|j| j.prior_disabled)
-                    .unwrap_or(Some(false));
-                restore_owned(prior);
             }
         }
     }
@@ -1094,9 +676,6 @@ mod platform {
 
     pub struct OsPower;
     pub struct Lock(Child);
-
-    /// No lid-closed flag is ever set off macOS, so nothing to recover.
-    pub fn recover_lid_closed() {}
 
     impl super::PowerSource for OsPower {
         fn engage(
@@ -1165,9 +744,6 @@ mod platform {
     pub struct OsPower;
     pub struct Lock;
 
-    /// No lid-closed flag is ever set off macOS, so nothing to recover.
-    pub fn recover_lid_closed() {}
-
     impl super::PowerSource for OsPower {
         fn engage(
             &self,
@@ -1212,9 +788,6 @@ mod platform {
 
     pub struct OsPower;
     pub struct Lock;
-
-    /// No lid-closed flag is ever set off macOS, so nothing to recover.
-    pub fn recover_lid_closed() {}
 
     impl super::PowerSource for OsPower {
         fn engage(
@@ -1583,91 +1156,7 @@ mod tests {
         assert_eq!(fmt_remaining(Duration::from_secs(30)), "<1m");
     }
 
-    // ── disablesleep read + restore decisions ─────────────────────────
-    //
-    // The lid-closed override is the one setting that outlives the
-    // process, so these pin down the three rules that keep a Mac from
-    // being left unable to sleep: a tri-state read, a prior-value-aware
-    // restore, and never clearing the recovery record without proof.
-
-    #[test]
-    fn parse_sleep_flag_reads_the_three_states() {
-        // A representative `pmset -g` block.
-        let enabled = "\
- System-wide power settings:\n\
- SleepDisabled          0\n\
- Currently in use:\n\
-  standby              1\n";
-        let disabled = "\
- System-wide power settings:\n\
- SleepDisabled          1\n";
-        assert_eq!(parse_sleep_flag(enabled), SleepFlag::Enabled);
-        assert_eq!(parse_sleep_flag(disabled), SleepFlag::Disabled);
-        // Field absent entirely: unknown, never silently "enabled".
-        assert_eq!(
-            parse_sleep_flag(" standby 1\n hibernatemode 3\n"),
-            SleepFlag::Unknown
-        );
-        // Present but not a recognized value: still unknown.
-        assert_eq!(parse_sleep_flag("SleepDisabled   ?\n"), SleepFlag::Unknown);
-        assert_eq!(parse_sleep_flag(""), SleepFlag::Unknown);
-    }
-
-    #[test]
-    fn a_preexisting_override_is_never_reset() {
-        // Prior was already disabled (another tool, or the user): klipa
-        // does not own the "on", so it leaves the flag and drops only its
-        // record, whatever the later readback says.
-        for readback in [SleepFlag::Enabled, SleepFlag::Disabled, SleepFlag::Unknown] {
-            assert_eq!(restore_step(Some(true), readback), RestoreStep::LeaveFlag);
-        }
-    }
-
-    #[test]
-    fn a_restore_clears_the_journal_only_when_confirmed() {
-        // Owned override (prior enabled): only a verified return to
-        // `Enabled` clears the journal.
-        assert_eq!(
-            restore_step(Some(false), SleepFlag::Enabled),
-            RestoreStep::Clear
-        );
-        assert_eq!(
-            restore_step(Some(false), SleepFlag::Disabled),
-            RestoreStep::Retain
-        );
-        assert_eq!(
-            restore_step(Some(false), SleepFlag::Unknown),
-            RestoreStep::Retain
-        );
-        // Ambiguous ownership (migrated legacy marker / unreadable prior):
-        // same rule, so a failed restore never loses the evidence.
-        assert_eq!(restore_step(None, SleepFlag::Enabled), RestoreStep::Clear);
-        assert_eq!(restore_step(None, SleepFlag::Disabled), RestoreStep::Retain);
-        assert_eq!(restore_step(None, SleepFlag::Unknown), RestoreStep::Retain);
-    }
-
-    #[test]
-    fn an_existing_journal_keeps_ownership_across_reengage() {
-        // Re-engaging mid-override (mode/duration change) must not relabel
-        // an owned override as someone else's just because the flag now
-        // reads `Disabled`: the existing prior value wins.
-        assert_eq!(
-            prior_to_record(Some(Some(false)), SleepFlag::Disabled),
-            Some(false)
-        );
-        assert_eq!(
-            prior_to_record(Some(Some(true)), SleepFlag::Disabled),
-            Some(true)
-        );
-        assert_eq!(prior_to_record(Some(None), SleepFlag::Enabled), None);
-    }
-
-    #[test]
-    fn a_fresh_engage_records_the_observed_prior() {
-        // No existing journal: the recorded prior comes straight from the
-        // readback, with an unreadable prior left ambiguous (`None`).
-        assert_eq!(prior_to_record(None, SleepFlag::Enabled), Some(false));
-        assert_eq!(prior_to_record(None, SleepFlag::Disabled), Some(true));
-        assert_eq!(prior_to_record(None, SleepFlag::Unknown), None);
-    }
+    // The disablesleep read + restore decisions moved to `lid.rs` (the lid
+    // override coordinator) along with the rest of the privileged path, and
+    // are unit-tested there.
 }

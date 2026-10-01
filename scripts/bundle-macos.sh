@@ -10,6 +10,13 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
+# Target macOS 11.0, matching the bundle's LSMinimumSystemVersion. This
+# makes the linker weak-reference any framework symbols introduced after
+# 11.0 (notably the macOS 13+ SMAppService path), so the binary still loads
+# on 11/12, where the passwordless helper is runtime-gated off and the
+# admin-prompt fallback is used instead.
+export MACOSX_DEPLOYMENT_TARGET="${MACOSX_DEPLOYMENT_TARGET:-11.0}"
+
 TARGET="${TARGET:-}"
 FEATURES="${FEATURES:-}"
 NO_DEFAULT="${NO_DEFAULT:-}"

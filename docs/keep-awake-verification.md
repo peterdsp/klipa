@@ -8,34 +8,47 @@ Status date: 2026-10-01. Candidate commit: the keep-awake reliability
 changes on top of `368cf36`. Version unchanged at 0.5.4 in-tree (no release
 cut; see `docs/keep-awake-release-checklist.md`).
 
-## Automated gates (run on the build host)
+## Automated gates (run on the build host, version 0.6.0)
 
 Host: model Mac17,3, arm64, macOS 27.0 (build 26A428), Rust 1.98.1.
 
 | Gate | Command | Result |
 |---|---|---|
+| Format | `cargo fmt --all -- --check` | PASS (normalized) |
 | Build | `cargo build --workspace --all-targets --locked` | PASS |
-| Tests | `cargo test --workspace --locked` | PASS (klipa-ui 42, klipa-helper 2, klipa-core 3, +doctests) |
+| Tests | `cargo test --workspace --locked` | PASS (klipa-ui 42, klipa-helper 20, klipa-ipc 6, klipa-core 3, +doctests) |
 | Clippy | `cargo clippy --workspace --all-targets --locked -- -D warnings` | PASS |
-| MAS+weather tests | `cargo test -p klipa-ui --no-default-features --features "mas weather" --locked` | PASS (34) |
-| MAS tests | `cargo test -p klipa-ui --no-default-features --features mas --locked` | PASS (34) |
+| MAS+weather tests | `cargo test -p klipa-ui --no-default-features --features "mas weather" --locked` | PASS (29) |
+| MAS tests | `cargo test -p klipa-ui --no-default-features --features mas --locked` | PASS (29) |
 | No-default tests | `cargo test -p klipa-ui --no-default-features --locked` | PASS (36) |
 | Clippy, each MAS combo | `cargo clippy -p klipa-ui --no-default-features [--features ...] --all-targets --locked -- -D warnings` | PASS |
 
-New deterministic tests added this pass (injected inputs, no real power
-state touched, no long sleeps):
+Deterministic tests covering the section-7 matrix (injected clocks,
+system, and journal seams; no real power state touched, no long sleeps):
 
-- `parse_sleep_flag` reads the three states and treats a missing or
-  unrecognized field as `Unknown`, never silently `Enabled`.
-- `restore_step`: a pre-existing override klipa did not set is never reset;
-  the recovery journal is cleared only on a confirmed `Enabled` readback;
-  an unconfirmed or `Unknown` restore retains the journal.
-- `prior_to_record`: an existing journal keeps ownership across a re-engage
-  (mode/duration change); a fresh engage records the observed prior, with
-  an unreadable prior left ambiguous.
-- Helper `classify`: only `set 1` / `set 0` / `ping` are accepted;
-  everything else (including shell-injection-looking and over-long input)
-  is rejected.
+- Protocol (`klipa-ipc`): request/response round-trips, oversized messages
+  refused (not truncated), a line at the cap rejected on decode, garbage
+  and unknown ops are clean decode errors, and extra fields cannot smuggle
+  extra behavior.
+- Helper state machine (`manager.rs`): begin writes the journal before
+  setting; a failed set rolls back and names the reason; an unwritable
+  journal refuses to disable sleep; a pre-existing override is never reset;
+  end restores and clears only on confirmation; a stale generation cannot
+  disturb a newer session; idempotent re-begin; a lapsed lease restores
+  autonomously; the daemon owns timed-session expiry; renew extends the
+  lease; an unconfirmed restore retains the record; startup reconciles
+  interrupted-arming, prior-boot, and still valid sessions; another user
+  cannot end an owner's session; tri-state `pmset` parsing.
+- Helper auth (`auth.rs`): the pinned requirement includes identifier,
+  Apple anchor, and Team ID; no Team ID fails closed.
+- Lid coordinator (`lid.rs`): tri-state parse; restore never clears without
+  confirmation; prior-value ownership; the 8-state protection classifier
+  across the lifecycle.
+- Session logic (`awake.rs`): the full existing suite (indefinite has no
+  expiry, modes map to the right assertion, every replacement releases
+  first, no transient gap on mode change, etc.) plus a live IOKit
+  assert/release smoke test.
+- Helper client (`helper.rs`): remaining-session countdown math.
 
 ### Pre-existing gate state (clearly separated from this pass)
 
@@ -74,7 +87,7 @@ DOES sleep under the same idle conditions with klipa inactive.
 | Dock / external-display changes | protection + status reconcile | UNRUN |
 | Repeated lid cycles | >= 10 open/close cycles, no loss of protection | UNRUN |
 | Short timed session, lid shut | ends unattended; owned settings restore within stated tolerance | UNRUN |
-| Timed session, UI occupied | open menu / modal cannot delay helper expiry | UNRUN (depends on helper-owned expiry, not yet implemented) |
+| Timed session, UI occupied | open menu / modal cannot delay helper expiry | UNRUN on hardware (helper-owned expiry now implemented + unit-tested; needs physical confirmation) |
 | Indefinite session | >= 2 h soak, no invented expiry, no accumulating assertions/processes | UNRUN |
 | Duration/mode change while shut | no intermediate sleep gap; deadlines do not reset | UNRUN |
 | Normal quit and force-quit | helper restores without relaunching klipa | UNRUN |

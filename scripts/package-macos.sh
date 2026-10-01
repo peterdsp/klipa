@@ -17,6 +17,19 @@ VERSION="$(grep -m1 '^version' Cargo.toml | sed -E 's/.*"([^"]+)".*/\1/')"
 APP="dist/klipa.app"
 PKG="dist/klipa-${VERSION}-macos.pkg"
 
+# Bake the signing Team ID into the privileged helper so its caller
+# code-signature check pins klipa's team. Derived from the Developer ID
+# identity (the parenthesized team id), which is public information. Unset
+# in an unsigned build, where the helper fails closed and the app falls
+# back to the admin prompt. Exported before the build so build.rs sees it.
+if [ -n "${DEV_ID_APP:-}" ]; then
+  KLIPA_TEAM_ID="$(printf '%s' "$DEV_ID_APP" | sed -E 's/.*\(([A-Z0-9]+)\).*/\1/')"
+  if [ -n "$KLIPA_TEAM_ID" ]; then
+    export KLIPA_TEAM_ID
+    echo "==> helper will pin Team ID $KLIPA_TEAM_ID"
+  fi
+fi
+
 TARGET="${TARGET:-universal}" ./scripts/bundle-macos.sh
 
 if [ -n "${DEV_ID_APP:-}" ]; then
