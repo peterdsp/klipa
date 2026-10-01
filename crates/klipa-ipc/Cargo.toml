@@ -1,0 +1,16 @@
+[package]
+name = "klipa-ipc"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Versioned request/response protocol shared by the klipa app and its privileged helper."
+repository.workspace = true
+authors.workspace = true
+
+# Pure, platform-agnostic protocol types + framing. No OS calls live here,
+# so both the app (client) and the daemon (server) depend on one source of
+# truth for the wire format, and the framing rules are unit-tested on every
+# platform.
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }

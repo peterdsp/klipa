@@ -19,6 +19,21 @@ use std::fs;
 use std::path::PathBuf;
 
 fn main() {
+    // Bake the signing Team ID (public information, visible in any signed
+    // binary) so the daemon can pin the caller's code-signature to klipa's
+    // team. Read from KLIPA_TEAM_ID, falling back to the TEAM_ID the signing
+    // step already exports. Absent => the helper fails closed and rejects
+    // all callers, which is correct for an unsigned local/dev build.
+    println!("cargo:rerun-if-env-changed=KLIPA_TEAM_ID");
+    println!("cargo:rerun-if-env-changed=TEAM_ID");
+    let team_id = env::var("KLIPA_TEAM_ID")
+        .ok()
+        .or_else(|| env::var("TEAM_ID").ok())
+        .unwrap_or_default();
+    if !team_id.trim().is_empty() {
+        println!("cargo:rustc-env=KLIPA_TEAM_ID={}", team_id.trim());
+    }
+
     // Only the macOS daemon needs (or can use) the embedded plist section.
     if env::var("CARGO_CFG_TARGET_OS").as_deref() != Ok("macos") {
         return;

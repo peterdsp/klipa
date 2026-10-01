@@ -11,7 +11,12 @@ authors.workspace = true
 name = "klipa-helper"
 path = "src/main.rs"
 
-# Intentionally dependency-free. This binary runs as root, so its whole
-# job and its entire attack surface stay auditable in one small file of
-# pure std: accept a whitelisted command on a local socket, run `pmset`.
+# Runs as root, so the dependency set is kept deliberately tiny and
+# auditable: the shared wire protocol, serde for the structured messages
+# and the root-owned recovery journal, and nothing else. All privileged
+# work (pmset, the caller code-signature check) is hand-written FFI in this
+# crate, not a third-party dependency.
 [dependencies]
+klipa-ipc = { path = "../klipa-ipc" }
+serde = { workspace = true }
+serde_json = { workspace = true }

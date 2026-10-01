@@ -1252,6 +1252,19 @@ dependencies = [
 [[package]]
 name = "klipa-helper"
 version = "0.5.4"
+dependencies = [
+ "klipa-ipc",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "klipa-ipc"
+version = "0.5.4"
+dependencies = [
+ "serde",
+ "serde_json",
+]
 
 [[package]]
 name = "klipa-ui"
