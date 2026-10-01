@@ -215,7 +215,12 @@ happens in the daemon.
   whitelist of commands: `set 1`, `set 0`, `ping`. Anything else is
   rejected, so a compromise of the app can only toggle system sleep, never
   run arbitrary code as root. This matches the chosen scope: the helper
-  does the power toggle and nothing else.
+  does the power toggle and nothing else. Each request is bounded in size
+  (256 bytes) and time (a 5s read/write deadline), so a client that
+  connects and then stalls or floods cannot wedge the single accept loop or
+  exhaust memory. The command parser is a separate, unit-tested whitelist
+  (`classify`), so CI exercises the helper logic rather than only compiling
+  the daemon.
 - **Embedded `Info.plist` (required).** `SMAppService` only registers a
   daemon whose helper executable carries a bundle identifier, which for a
   plain (non-Xcode) binary means an `Info.plist` in the Mach-O
@@ -287,19 +292,27 @@ feature is built with that firmly in mind:
   never cleared it, the Mac would never sleep again. The revert path is
   therefore load-bearing, not a nicety, and is handled three ways:
   1. **Normal end** (timer expiry, "End current session", switching to
-     another mode, or quitting klipa): `Drop` on the lock runs
-     `pmset disablesleep 0` (silently via the helper, or via one admin
-     prompt in Option A).
+     another mode, or quitting klipa): `Drop` on the lock restores the
+     prior `disablesleep` value (silently via the helper, or via one admin
+     prompt in Option A) and reconciles the recovery journal against a
+     verified readback.
   2. **Clean quit:** the Quit handler ends the session *before* exiting
      the event loop, so any Option A revert prompt lands while the app is
      still alive rather than during teardown.
-  3. **Unclean exit** (crash, force-quit, power loss): a sentinel file
-     (`lid_awake.on`, see [`paths::lid_awake_marker`](../crates/klipa-ui/src/paths.rs))
-     is written the instant the flag is set. On the next launch,
-     `awake::recover_lid_closed()` sees the marker and, only if the system
-     is genuinely still `SleepDisabled`, restores normal sleep. If a
-     reboot already cleared the flag, it just deletes the marker with no
-     prompt.
+  3. **Unclean exit** (crash, force-quit, power loss): a recovery journal
+     (`lid_awake.json`, see [`paths::lid_awake_journal`](../crates/klipa-ui/src/paths.rs))
+     is written *before* the flag is changed. It records the exact
+     `disablesleep` value observed beforehand and the boot session, so the
+     restore returns to that prior value rather than blindly to zero (an
+     existing override klipa did not set is left alone). On the next
+     launch, `awake::recover_lid_closed()` reconciles it: it restores only
+     if the system is genuinely still `SleepDisabled`, verifies the result
+     with a tri-state read, and clears the journal only once the restore is
+     confirmed. A restore that cannot be confirmed keeps the journal so the
+     next launch retries rather than losing the evidence. A pre-0.5.5
+     boolean `lid_awake.on` marker is migrated as ambiguous ownership (no
+     fabricated prior value). The read distinguishes enabled, disabled, and
+     unreadable, so an unknown state is never mistaken for a restored one.
 - **No half-on sessions.** If the user cancels the admin prompt, `engage`
   releases the IOKit assertion and reports failure, so klipa never claims
   a lid-closed session that would silently die the moment the lid shuts.
