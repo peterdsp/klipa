@@ -46,8 +46,12 @@ pub enum State {
     NeedsApproval,
     /// Registered and enabled: toggles are passwordless.
     Active,
-    /// The OS can't find the bundled daemon (unsigned/dev build, or the
-    /// app was moved). Treated like "not installed" for the menu.
+    /// This build ships no daemon to register (a bare `cargo run` with no
+    /// app bundle), or the OS predates `SMAppService` (macOS 11/12). The
+    /// passwordless helper genuinely cannot run here; the admin-prompt path
+    /// still works. A `NotFound` status for a build that DOES ship the plist
+    /// is treated as [`State::NotInstalled`] (registerable/repairable), not
+    /// this.
     Unavailable,
 }
 
@@ -77,6 +81,25 @@ fn macos_major() -> u32 {
         .unwrap_or(0)
 }
 
+/// Derive the bundled LaunchDaemon plist path from the running executable
+/// (`<bundle>/Contents/MacOS/<bin>` -> `<bundle>/Contents/Library/LaunchDaemons/<plist>`).
+/// Pure, so the derivation is unit-tested without a real bundle.
+fn daemon_plist_from_exe(exe: &std::path::Path) -> Option<std::path::PathBuf> {
+    // exe = <bundle>/Contents/MacOS/<bin>; parent().parent() = <bundle>/Contents
+    let contents = exe.parent()?.parent()?;
+    Some(contents.join("Library/LaunchDaemons").join(PLIST_NAME))
+}
+
+/// Whether this build actually ships the daemon plist in its bundle. A bare
+/// `cargo run` (no .app) or a build without the bundled daemon returns false,
+/// so we never offer to "enable" a helper that cannot possibly register.
+fn bundled_plist_exists() -> bool {
+    std::env::current_exe()
+        .ok()
+        .and_then(|exe| daemon_plist_from_exe(&exe))
+        .is_some_and(|p| p.exists())
+}
+
 /// Current registration state of the helper daemon.
 pub fn state() -> State {
     if !available() {
@@ -86,7 +109,21 @@ pub fn state() -> State {
         ServiceStatus::Enabled => State::Active,
         ServiceStatus::RequiresApproval => State::NeedsApproval,
         ServiceStatus::NotRegistered => State::NotInstalled,
-        ServiceStatus::NotFound => State::Unavailable,
+        // `NotFound` means the OS has no usable record for the daemon: it was
+        // never registered, or a stale/foreign registration (for example a
+        // prior dev build registered under Xcode, or an upgrade over a
+        // sideloaded build) shadows it. When this build actually ships the
+        // daemon plist, `register()` is the documented recovery, so surface it
+        // as installable/repairable rather than a dead "unavailable" with no
+        // action. Only when the plist is genuinely absent (a bare dev build)
+        // is it truly unavailable.
+        ServiceStatus::NotFound => {
+            if bundled_plist_exists() {
+                State::NotInstalled
+            } else {
+                State::Unavailable
+            }
+        }
     }
 }
 
@@ -99,7 +136,18 @@ pub fn install() {
     let svc = service();
     match svc.register() {
         Ok(()) => tracing::info!("klipa helper registered"),
-        Err(e) => tracing::warn!(error = ?e, "klipa helper register failed"),
+        Err(e) => {
+            // A first register can fail when a stale or foreign registration
+            // (for example a prior dev build registered under Xcode) shadows
+            // the daemon, which the OS reports as NotFound. Repair it: drop
+            // the stale record, then register fresh.
+            tracing::warn!(error = ?e, "klipa helper register failed; repairing via unregister + register");
+            let _ = svc.unregister();
+            match svc.register() {
+                Ok(()) => tracing::info!("klipa helper registered after repair"),
+                Err(e2) => tracing::warn!(error = ?e2, "klipa helper repair register failed"),
+            }
+        }
     }
     if svc.status() == ServiceStatus::RequiresApproval {
         AppService::open_system_settings_login_items();
@@ -541,6 +589,21 @@ mod tests {
         // Clean up the global so other tests see no live renewer.
         stop.store(true, std::sync::atomic::Ordering::SeqCst);
         *renewer_slot().lock().unwrap() = None;
+    }
+
+    #[test]
+    fn daemon_plist_path_is_derived_from_the_bundle_layout() {
+        use std::path::{Path, PathBuf};
+        let exe = Path::new("/Applications/klipa.app/Contents/MacOS/klipa");
+        assert_eq!(
+            daemon_plist_from_exe(exe),
+            Some(PathBuf::from(
+                "/Applications/klipa.app/Contents/Library/LaunchDaemons/dev.peterdsp.klipa.helper.plist"
+            ))
+        );
+        // A bare binary with no bundle above it yields no plist path, so the
+        // "repairable" branch never fires for a non-bundled dev build.
+        assert_eq!(daemon_plist_from_exe(Path::new("klipa")), None);
     }
 
     #[test]
