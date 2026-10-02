@@ -306,6 +306,26 @@ enabled while a session is active), so a power-source transition that clears
 losing protection. This is defense in depth; the charger-transition case
 still requires the physical gate to confirm end to end.
 
+## Update 2026-10-02: 0.6.2 helper NotFound is registerable, not a dead end
+
+Found during real install verification on the owner's Mac. `SMAppService`
+reported the daemon status as `NotFound`, which klipa mapped to a dead
+`State::Unavailable` that shows no helper control at all, so passwordless mode
+could never be enabled or repaired. The cause on that machine was a stale
+background-item registration left from running the app under Xcode (a BTM
+record parented under `com.apple.dt.Xcode`, marked `disallowed`), which
+shadows the daemon. A clean machine reports `NotRegistered` and is unaffected,
+but an upgrade over a dev or sideloaded build can hit this.
+
+Fix (0.6.2): `state()` now treats `NotFound` as `NotInstalled`
+(registerable/repairable) when this build actually ships the daemon plist
+(`bundled_plist_exists`, derived from the executable's bundle layout and
+unit-tested); only a build with no bundled plist stays `Unavailable`. And
+`install()` self-heals: if the first `register()` fails, it `unregister()`s the
+stale record and registers fresh. So `register()` (the documented recovery from
+NotFound) is always reachable from the menu, and a stale/foreign registration
+is repaired rather than leaving the user stuck.
+
 ### Reviewed section items with honest limitations (not silently "done")
 
 - **Clock**: the daemon uses the wall-clock epoch for lease/session
