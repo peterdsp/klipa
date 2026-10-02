@@ -151,23 +151,27 @@ authentication and offers it only where the sandbox permits it.
 `pmset disablesleep` needs root, and klipa ships in two macOS variants
 with different entitlements:
 
-| Capability                         | Direct download (Developer ID, not sandboxed) | Mac App Store (`mas` feature, sandboxed) |
-| ---------------------------------- | :--------------------------------------------: | :--------------------------------------: |
-| IOPMAssertion idle keep-awake      | yes                                            | yes                                      |
-| Run `pmset` / shell out            | yes                                            | no (sandbox blocks it)                   |
-| Trigger the system admin prompt    | yes                                            | no                                       |
-| Lid-closed keep-awake, net result  | **shippable**                                  | **impossible**                           |
+| Capability                              | Direct download (Developer ID, not sandboxed) | Mac App Store (`mas` feature, sandboxed) |
+| --------------------------------------- | :--------------------------------------------: | :--------------------------------------: |
+| IOPMAssertion idle keep-awake           | yes                                            | yes                                      |
+| Clamshell closed-lid (external display) | yes (reported)                                 | yes (sandbox-legal, reported)            |
+| In-app root `pmset` / helper socket     | yes                                            | no (sandbox blocks the `/var/run` socket) |
+| Trigger the system admin prompt in-app  | yes                                            | no                                       |
+| Bare-laptop lid-closed, net result      | **shippable, in-app**                          | **only via an off-store, user-installed helper** |
 
-So the feature is gated to the non-App-Store build. In code this is:
+So the *in-app* privileged override is gated to the non-App-Store build. In
+code this is:
 
 ```rust
 pub const LID_CLOSED_SUPPORTED: bool = !cfg!(feature = "mas");
 ```
 
-In the sandboxed (`mas`) build the whole lid-closed path compiles to dead
-runtime branches, and the tray never shows the toggle. `KeepAwake::view`
-exposes `lid_closed_supported` so the menu hides a control that would do
-nothing.
+In the sandboxed (`mas`) build the in-app override path compiles out and the
+tray hides that toggle. This is NOT "closed-lid is impossible on the App
+Store": clamshell closed-lid is sandbox-legal, and bare-laptop closed-lid is
+possible in the MAS product through a separate, user-installed, off-store
+`pmset`-scoped helper invoked via Application Scripts (the Amphetamine
+pattern). See `docs/mas-closed-lid-feasibility.md`.
 
 ## How klipa acquires root
 

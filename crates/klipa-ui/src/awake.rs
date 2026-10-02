@@ -546,10 +546,19 @@ mod platform {
         assertion: u32,
     }
 
-    /// Only the non-App-Store build can honor lid-closed mode: it needs a
-    /// privileged `disablesleep` change the App Sandbox forbids. In the
-    /// sandboxed (`mas`) build this is `false` and the lid-closed path is
-    /// inert (the menu hides the control).
+    /// Gates the *in-app privileged override*: the direct build's root
+    /// daemon that writes `disablesleep` over a `/var/run` Unix socket. A
+    /// sandboxed MAS app cannot reach that socket (the App Sandbox blocks
+    /// unmediated cross-team IPC, and no entitlement covers UNIX sockets),
+    /// so this is `false` in the `mas` build and the in-app override path is
+    /// compiled out.
+    ///
+    /// This is NOT "the MAS product cannot do closed-lid." Clamshell
+    /// closed-lid (external display) is sandbox-legal and reported in every
+    /// build (`clamshell.rs`); bare-laptop closed-lid is possible in the MAS
+    /// product only via a separate, user-installed, off-store `pmset`-scoped
+    /// helper invoked through Application Scripts (the Amphetamine pattern).
+    /// See `docs/mas-closed-lid-feasibility.md`.
     pub const LID_CLOSED_SUPPORTED: bool = !cfg!(feature = "mas");
 
     // kIOPMAssertionLevelOn.
