@@ -31,6 +31,11 @@ mod license;
 mod lid;
 mod paths;
 mod platform;
+// Mac App Store closed-lid companion: the app-side contract with the
+// off-store, user-installed Power Protect helper (packaging/macos/powerprotect).
+// App Store build only; the direct build uses the privileged daemon instead.
+#[cfg(all(target_os = "macos", feature = "mas"))]
+mod powerprotect;
 // The single native modal: "how long?" for a custom keep-awake session.
 mod prompt;
 mod settings;

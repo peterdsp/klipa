@@ -1,0 +1,38 @@
+#!/bin/sh
+# klipa Power Protect watchdog: owns unattended TIMED restore.
+#
+# The sandboxed app cannot run behind a shut lid, so a timed closed-lid
+# session needs something that can. This script, run by a per-user
+# LaunchAgent on a short interval, restores normal sleep at the deadline the
+# app recorded, even while the lid is closed (it runs because disablesleep=1
+# is keeping the Mac awake during the session).
+#
+# Contract with the app:
+#   * To arm a timed session, the app writes the absolute restore time (epoch
+#     seconds) to  ~/Library/Application Support/dev.peterdsp.klipa/powerprotect.deadline
+#   * On an explicit stop, or for an indefinite session, the app removes the
+#     file (indefinite sessions are never armed here; the user ends them).
+#   * Extending a session just rewrites the file with a later epoch.
+#
+# When now >= deadline, restore sleep via the installed toggle (which elevates
+# only the authorized `pmset -a disablesleep 0`), then clear the deadline.
+set -eu
+
+SUPPORT="$HOME/Library/Application Support/dev.peterdsp.klipa"
+DEADLINE_FILE="$SUPPORT/powerprotect.deadline"
+TOGGLE="$HOME/Library/Application Scripts/dev.peterdsp.klipa/klipa-powerprotect"
+
+[ -f "$DEADLINE_FILE" ] || exit 0
+
+deadline="$(tr -dc '0-9' < "$DEADLINE_FILE" 2>/dev/null || true)"
+[ -n "$deadline" ] || { rm -f "$DEADLINE_FILE"; exit 0; }
+
+now="$(date +%s)"
+if [ "$now" -ge "$deadline" ]; then
+    if [ -x "$TOGGLE" ]; then
+        "$TOGGLE" off >/dev/null 2>&1 || true
+    else
+        sudo -n /usr/bin/pmset -a disablesleep 0 >/dev/null 2>&1 || true
+    fi
+    rm -f "$DEADLINE_FILE"
+fi

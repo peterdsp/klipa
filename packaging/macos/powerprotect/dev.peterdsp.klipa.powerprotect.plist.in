@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  klipa Power Protect LaunchAgent (template).
+
+  install.sh substitutes __WATCHDOG__ with the absolute path of the installed
+  watchdog script and writes this to
+  ~/Library/LaunchAgents/dev.peterdsp.klipa.powerprotect.plist, then
+  `launchctl bootstrap gui/$UID` it.
+
+  It is a per-USER agent (never a root daemon), runs only the watchdog, and
+  owns unattended timed restore. RunAtLoad reconciles a stale deadline left by
+  a crash or reboot; StartInterval re-checks during an active timed session.
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>dev.peterdsp.klipa.powerprotect</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/sh</string>
+        <string>__WATCHDOG__</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>StartInterval</key>
+    <integer>30</integer>
+    <key>ProcessType</key>
+    <string>Background</string>
+    <key>LowPriorityIO</key>
+    <true/>
+</dict>
+</plist>

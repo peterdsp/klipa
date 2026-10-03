@@ -1,0 +1,41 @@
+#!/bin/sh
+# klipa Power Protect: toggle the system lid-close sleep override.
+#
+# Installed by the user (via install.sh) into their own Application Scripts
+# directory (~/Library/Application Scripts/dev.peterdsp.klipa/), the one
+# place a sandboxed app may execute a user script from. The sandboxed klipa
+# Mac App Store build invokes this through NSUserUnixTask; it is also safe to
+# run by hand.
+#
+# It elevates ONLY the two exact pmset commands the user authorized in
+# /etc/sudoers.d/dev.peterdsp.klipa (NOPASSWD, scoped to those two lines and
+# nothing else), then reads the effective state back so the caller never has
+# to infer protection from the fact that it asked.
+#
+# Usage: klipa-powerprotect on|off|status
+set -eu
+
+PMSET=/usr/bin/pmset
+
+read_flag() {
+    # Prints the live SleepDisabled value (0/1), or "?" if unreadable.
+    "$PMSET" -g 2>/dev/null | awk '/SleepDisabled/{print $2; found=1} END{if(!found) print "?"}'
+}
+
+case "${1:-}" in
+    on)
+        sudo -n "$PMSET" -a disablesleep 1
+        ;;
+    off)
+        sudo -n "$PMSET" -a disablesleep 0
+        ;;
+    status)
+        ;;
+    *)
+        echo "usage: klipa-powerprotect on|off|status" >&2
+        exit 2
+        ;;
+esac
+
+# Always report the read-back state on stdout, in a single parseable line.
+printf 'SleepDisabled=%s\n' "$(read_flag)"

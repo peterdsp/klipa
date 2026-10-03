@@ -1,0 +1,10 @@
+# klipa Power Protect sudoers rule (template).
+#
+# install.sh substitutes __USER__ with the installing user's short name and
+# writes the result to /etc/sudoers.d/dev.peterdsp.klipa (owner root:wheel,
+# mode 0440), after validating it with `visudo -cf`.
+#
+# It grants the signed-in user permission to run ONLY the two exact commands
+# that toggle the lid-close sleep override, with no password. Nothing else,
+# ever: not pmset in general, not a shell, not any other flag combination.
+__USER__ ALL=(root) NOPASSWD: /usr/bin/pmset -a disablesleep 1, /usr/bin/pmset -a disablesleep 0
