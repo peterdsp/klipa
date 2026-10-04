@@ -83,6 +83,37 @@ authorization (the user, not the app):
   Application Scripts directory via `NSUserUnixTask`, which the sandbox
   sanctions without extra entitlement.
 
+### Open sandbox dependency found during implementation (needs a signed build)
+
+A sandboxed app's `~/Library/Application Support` is **redirected into its
+container** (`~/Library/Containers/dev.peterdsp.klipa/Data/...`), while the
+off-sandbox toggle script and the LaunchAgent watchdog run as the plain user
+and see the **real** `~/Library/Application Support`. So the app and the
+helper scripts do NOT automatically share a file there. The session stamp the
+watchdog reads cannot simply be the app's `paths::data_dir()` file. Three
+candidate resolutions, and which one is correct can only be settled on a real
+MAS-signed sandboxed build:
+
+1. **Script-owned state + argument passing (favored).** The app passes the
+   verb and parameters (on/off/status, deadline, prior) to the toggle as
+   `NSUserUnixTask` arguments, and reads the result from the task's captured
+   stdout. The toggle (and watchdog) own the stamp at the real-path
+   `~/Library/Application Support/dev.peterdsp.klipa/powerprotect.session`.
+   The app never reads that file. The pure session logic already implemented
+   (`powerprotect::SessionManager` and the stamp parse/serialize) then runs in
+   the script side, with the Rust helpers as its tested specification and the
+   app driving it by verb.
+2. **Application Scripts directory as the shared path** (both see it at the
+   real path), if the sandbox lets the app write there. Unverified.
+3. **App-group container** shared between the app and a packaged helper. This
+   reintroduces a helper the app ships, which pushes back toward the 2.4.5
+   problems, so it is the least preferred.
+
+This is the single most important thing to settle on a signed build; it does
+not change the privilege model or the review posture, only where the shared
+state lives and whether the session loop runs in Rust (app) or in the shell
+(script).
+
 ## Review implications
 
 - Guideline 2.4.5: compliant because the app installs nothing in shared
@@ -95,26 +126,60 @@ authorization (the user, not the app):
   Mac awake and reports clamshell state. Provide the reviewer the same helper
   download a customer uses.
 
+## What is implemented and tested now (no device needed)
+
+- Pure session + recovery logic in `crates/klipa-ui/src/powerprotect.rs`,
+  over injected runner + stamp-store seams: engage/end/extend/expiry,
+  prior-value capture and restoration (a user-preexisting `disablesleep=1` is
+  marked unowned and never cleared), deadline validation, and launch
+  reconciliation of a stranded owned session. 18 unit tests.
+- The off-store helper (`packaging/macos/powerprotect/`): toggle, watchdog,
+  sudoers template, LaunchAgent, install/uninstall. The sudoers rule passes
+  `visudo -cf`; all scripts pass `sh -n`; the Rust `SessionStamp::to_text`
+  output and the watchdog's awk parser are cross-checked to agree byte for
+  byte.
+
+## CI can build and App-Store-validate this branch (no new Apple access)
+
+The repo already holds the MAS signing secrets (`MAS_CERTS_P12_BASE64`,
+`MAS_CERTS_P12_PASSWORD`, `MAS_PROVISION_PROFILE_BASE64`, `ASC_*`, `TEAMID`) that
+produced the 0.6.2 upload. `release.yml` now accepts
+`workflow_dispatch -f mas_validate_only=true`, which builds the MAS pkg, signs
+it with the Apple Distribution + 3rd Party Mac Developer Installer identities and
+the provisioning profile, and runs `xcrun altool --validate-app` against the App
+Store, WITHOUT uploading. So the signed-and-validatable MAS build of this branch
+is produced in CI; no new owner Apple action is needed to get that far.
+
 ## Proof plan: what must be shown, and what blocks it
 
-| Claim | How to prove | Blocked on |
+| Claim | How to prove | Status / blocked on |
 |---|---|---|
-| `NSUserUnixTask` runs the Application-Scripts script from a sandboxed build | Run it from a MAS-signed build with the real entitlements | Apple MAS provisioning profile / signing (owner Apple account) |
-| The sandboxed app cannot reach `/var/run` (so the direct socket path is truly out) | Attempt `UnixStream::connect` from the MAS-signed build; expect sandbox denial | Same MAS-signed build |
-| sudoers rule + script toggle `disablesleep` 0<->1 with read-back | Install on a CLEAN test account/Mac, run the script, read `pmset -g` | A clean environment, NOT the Mac mid direct-build test (contamination) |
+| The MAS build compiles, signs (MAS cert + profile), and passes `altool --validate-app` | CI `release.yml` dispatch with `mas_validate_only=true` | Runnable in CI now with existing secrets (dispatched) |
+| `NSUserUnixTask` actually runs the Application-Scripts toggle from inside the sandbox, and stdout is capturable | Run a signed sandboxed build and observe | A RUNNABLE signed sandboxed build (TestFlight, or a Developer-ID + app-sandbox dev build); not just a CI-built pkg |
+| Where app and scripts share state (the Application Support redirection fork above) | Observe real vs container paths on a signed sandboxed build | Same runnable sandboxed build |
+| The sandboxed app cannot reach `/var/run` (direct socket truly out) | `UnixStream::connect` from the sandboxed build; expect denial | Same runnable sandboxed build |
+| sudoers rule + toggle flips `disablesleep` 0<->1 with read-back, restores to prior | Install on a CLEAN account/Mac, run the toggle, read `pmset -g` | A clean environment, NOT the Mac mid direct-build test (contamination) |
 | LaunchAgent restores a timed session behind a shut lid | Physical timed closed-lid case on the clean env | Clean env + physical lid action (owner) |
-| App Review accepts the shape | Submit the MAS build with accurate review notes | Owner Apple account; outcome is Apple's, not assertable in advance |
+| App Review accepts the shape | Submit with accurate review notes | Owner Apple account; outcome is Apple's, not assertable in advance |
 
-## Exact remaining owner actions for B
+## The precise remaining dependencies for B (not "all of it")
 
-1. Confirm the direct build is physically verified and published first (agreed
-   sequencing), so B testing happens on a clean, uncontaminated environment.
-2. Provide Apple MAS signing access (Apple Distribution + 3rd Party Mac
-   Developer Installer certs, App Store Connect app record) so a real
-   sandboxed build can be produced and its sandbox behavior proven.
-3. Run the physical closed-lid cases for the MAS companion on a clean account,
-   without the direct helper installed and with no residual sleep override.
+Development that is NOT blocked is done (logic, companion, tests) or in CI
+(signed MAS build + validate). What genuinely needs more than code:
 
-Until the MAS-signed build exists and these run, B stays a documented,
-code-complete candidate, not a verified or approved feature. No "verified"
-claim will be made for it before that evidence exists.
+1. A **runnable signed sandboxed build** (TestFlight build, or a local
+   Developer-ID build carrying the `app-sandbox` entitlement) to settle the two
+   runtime unknowns: that `NSUserUnixTask` executes the toggle and returns its
+   output under the sandbox, and which state-sharing option (above) is correct.
+   A CI-built MAS `.pkg` is for upload, not local run, so it does not by itself
+   answer these.
+2. A **clean test environment** and **physical lid actions** to prove the
+   toggle/watchdog keep the Mac awake and restore, without contaminating the
+   direct-build test.
+3. The **owner Apple account** only for the final step: an actual App Store
+   Connect upload + submission + review. Building and validating do not need new
+   access; submitting for review does.
+
+Until the runnable sandboxed build settles the runtime unknowns, B stays a
+documented, logic-complete, CI-buildable candidate, not a verified or approved
+feature. No "verified" claim will be made for it before that evidence exists.
