@@ -150,11 +150,22 @@ the provisioning profile, and runs `xcrun altool --validate-app` against the App
 Store, WITHOUT uploading. So the signed-and-validatable MAS build of this branch
 is produced in CI; no new owner Apple action is needed to get that far.
 
+**Evidence (run 37224443856, branch `mas-powerprotect-candidate`, 2026-10-04):**
+the `mas` job built the branch, `codesign`d it for the App Store, `productbuild`
+signed `klipa-0.6.2-mas.pkg` with "3rd Party Mac Developer Installer: PETROS
+DHESPOLLARI", and reached `altool --validate-app`. The ONLY validation error was
+`-19232`: "The bundle version must be higher than the previously uploaded
+version: '0.6.2'." That is a version collision, not a code/signing/entitlement
+problem, and it independently confirms a 0.6.2 MAS build is already uploaded to
+App Store Connect. The pipeline is proven; a clean validate (and any real
+submission) just needs a higher version, once the Power Protect wiring and the
+runtime sandbox checks below are done.
+
 ## Proof plan: what must be shown, and what blocks it
 
 | Claim | How to prove | Status / blocked on |
 |---|---|---|
-| The MAS build compiles, signs (MAS cert + profile), and passes `altool --validate-app` | CI `release.yml` dispatch with `mas_validate_only=true` | Runnable in CI now with existing secrets (dispatched) |
+| The MAS build compiles, signs (MAS cert + profile), and reaches `altool --validate-app` | CI `release.yml` dispatch with `mas_validate_only=true` | DONE (run 37224443856): built, signed, productbuilt, validated up to the version-collision check (-19232); pipeline proven, no new Apple access |
 | `NSUserUnixTask` actually runs the Application-Scripts toggle from inside the sandbox, and stdout is capturable | Run a signed sandboxed build and observe | A RUNNABLE signed sandboxed build (TestFlight, or a Developer-ID + app-sandbox dev build); not just a CI-built pkg |
 | Where app and scripts share state (the Application Support redirection fork above) | Observe real vs container paths on a signed sandboxed build | Same runnable sandboxed build |
 | The sandboxed app cannot reach `/var/run` (direct socket truly out) | `UnixStream::connect` from the sandboxed build; expect denial | Same runnable sandboxed build |
