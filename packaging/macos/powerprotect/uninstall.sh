@@ -25,7 +25,7 @@ launchctl bootout "gui/$(id -u)/$AGENT_LABEL" 2>/dev/null || launchctl unload "$
 rm -f "$AGENT_DST"
 
 echo "==> removing user scripts and session state"
-rm -f "$TOGGLE" "$SUPPORT/klipa-powerprotect-watchdog" "$SUPPORT/powerprotect.deadline"
+rm -f "$TOGGLE" "$SUPPORT/klipa-powerprotect-watchdog" "$SUPPORT/powerprotect.session"
 rmdir "$APP_SCRIPTS" 2>/dev/null || true
 
 echo "==> removing the sudoers rule (you will be asked for your password)"

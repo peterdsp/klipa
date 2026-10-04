@@ -2,37 +2,60 @@
 # klipa Power Protect watchdog: owns unattended TIMED restore.
 #
 # The sandboxed app cannot run behind a shut lid, so a timed closed-lid
-# session needs something that can. This script, run by a per-user
-# LaunchAgent on a short interval, restores normal sleep at the deadline the
-# app recorded, even while the lid is closed (it runs because disablesleep=1
-# is keeping the Mac awake during the session).
+# session needs something that can. This per-user LaunchAgent script, run
+# RunAtLoad and on a short interval, restores the prior sleep setting at the
+# deadline the app recorded, even while the lid is closed (it runs because
+# disablesleep=1 is keeping the Mac awake during the session).
 #
-# Contract with the app:
-#   * To arm a timed session, the app writes the absolute restore time (epoch
-#     seconds) to  ~/Library/Application Support/dev.peterdsp.klipa/powerprotect.deadline
-#   * On an explicit stop, or for an indefinite session, the app removes the
-#     file (indefinite sessions are never armed here; the user ends them).
-#   * Extending a session just rewrites the file with a later epoch.
+# It reads the session stamp the app writes (byte-compatible with
+# crates/klipa-ui/src/powerprotect.rs SessionStamp):
 #
-# When now >= deadline, restore sleep via the installed toggle (which elevates
-# only the authorized `pmset -a disablesleep 0`), then clear the deadline.
+#   schema 1
+#   active 1
+#   prior 0            # disablesleep value BEFORE klipa engaged (restore target)
+#   deadline 1790000000  # epoch, or "none" for an indefinite session
+#
+# Restore means returning disablesleep to `prior`: if the user already had it
+# on (prior 1) klipa leaves it on; otherwise it turns it off. Only ACTIVE,
+# klipa-owned (prior != 1), TIMED, EXPIRED sessions are auto-restored here;
+# indefinite and unowned sessions are left for the app to end.
 set -eu
 
 SUPPORT="$HOME/Library/Application Support/dev.peterdsp.klipa"
-DEADLINE_FILE="$SUPPORT/powerprotect.deadline"
+STAMP="$SUPPORT/powerprotect.session"
 TOGGLE="$HOME/Library/Application Scripts/dev.peterdsp.klipa/klipa-powerprotect"
 
-[ -f "$DEADLINE_FILE" ] || exit 0
+[ -f "$STAMP" ] || exit 0
 
-deadline="$(tr -dc '0-9' < "$DEADLINE_FILE" 2>/dev/null || true)"
-[ -n "$deadline" ] || { rm -f "$DEADLINE_FILE"; exit 0; }
+# Parse the stamp with awk (last value wins per key).
+active="$(awk '$1=="active"{v=$2} END{print v+0}' "$STAMP" 2>/dev/null || echo 0)"
+prior="$(awk '$1=="prior"{v=$2} END{print v}' "$STAMP" 2>/dev/null || echo unknown)"
+deadline="$(awk '$1=="deadline"{v=$2} END{print v}' "$STAMP" 2>/dev/null || echo none)"
+
+# Only act on an active session.
+[ "$active" = "1" ] || exit 0
+# Indefinite sessions (deadline none / non-numeric) are the app's to end.
+case "$deadline" in
+    ''|*[!0-9]*) exit 0 ;;
+esac
+# A user-preexisting override (prior 1) is not klipa's to clear.
+[ "$prior" = "1" ] && exit 0
 
 now="$(date +%s)"
-if [ "$now" -ge "$deadline" ]; then
-    if [ -x "$TOGGLE" ]; then
-        "$TOGGLE" off >/dev/null 2>&1 || true
-    else
-        sudo -n /usr/bin/pmset -a disablesleep 0 >/dev/null 2>&1 || true
-    fi
-    rm -f "$DEADLINE_FILE"
+[ "$now" -ge "$deadline" ] || exit 0
+
+# Expired, owned, timed: restore to prior (prior is 0 or unknown here -> off).
+if [ -x "$TOGGLE" ]; then
+    "$TOGGLE" off >/dev/null 2>&1 || true
+else
+    sudo -n /usr/bin/pmset -a disablesleep 0 >/dev/null 2>&1 || true
 fi
+
+# Mark the stamp inactive so we do not repeat, and so the app sees it ended.
+TMP="$STAMP.tmp.$$"
+{
+    echo "schema 1"
+    echo "active 0"
+    echo "prior $prior"
+    echo "deadline $deadline"
+} > "$TMP" 2>/dev/null && mv "$TMP" "$STAMP" 2>/dev/null || rm -f "$TMP"
