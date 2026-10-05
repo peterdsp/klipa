@@ -1,8 +1,15 @@
 //! App-side contract for the Mac App Store "Power Protect" companion.
 //!
-//! The sandboxed App Store build cannot change system sleep itself, and it
-//! cannot reach the direct build's privileged daemon (the sandbox blocks the
-//! `/var/run` socket). The only approvable route for bare-laptop closed-lid is
+//! The sandboxed App Store build cannot change system sleep itself. It is NOT,
+//! however, blocked by the sandbox from the direct build's `/var/run` socket:
+//! a local app-sandbox probe on macOS 27.0 connected to the live 0666 helper
+//! socket exactly as an unsandboxed process did, while the same sandbox denied
+//! out-of-container user files (see `docs/mas-closed-lid-implementation.md`,
+//! "Runtime evidence"). The companion route is chosen instead because the App
+//! Store cannot ship or require that root `LaunchDaemon` (guideline 2.4.5), and
+//! because a `pmset`-scoped sudoers rule is far less privilege than a root
+//! daemon, NOT because of a technical sandbox block.
+//! The only approvable route for bare-laptop closed-lid is
 //! the off-store, user-installed Power Protect helper
 //! (`packaging/macos/powerprotect/`): a toggle script in the user's
 //! Application Scripts directory, authorized by a `pmset`-scoped sudoers rule,
@@ -20,8 +27,15 @@
 //!     session found at launch.
 //!
 //! Actually executing the toggle (via `NSUserUnixTask`) and the menu wiring
-//! live in `powerprotect_run` and `tray`; the runtime sandbox behavior of
-//! `NSUserUnixTask` needs a real MAS-signed build to confirm.
+//! live in `powerprotect_run` and `tray`. A local app-sandbox probe has now
+//! confirmed the runtime behavior `NSUserUnixTask` relies on: inside the
+//! sandbox it runs the Application-Scripts toggle and captures its stdout, a
+//! failing privileged call surfaces as an error (never a false "on"), the
+//! app's `~/Library/Application Support` is redirected into its container while
+//! the Application Scripts directory is the real path and read-only to the app
+//! (so the watchdog, not the app, must own the shared stamp). A
+//! profile-backed App Store build should re-confirm under its real
+//! application-identifier container; see `docs/mas-closed-lid-implementation.md`.
 
 // Items are wired into the menu and startup incrementally; until the UI
 // integration lands, some are exercised only by tests. Keeps clippy green

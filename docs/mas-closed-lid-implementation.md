@@ -104,15 +104,23 @@ MAS-signed sandboxed build:
    the script side, with the Rust helpers as its tested specification and the
    app driving it by verb.
 2. **Application Scripts directory as the shared path** (both see it at the
-   real path), if the sandbox lets the app write there. Unverified.
+   real path), if the sandbox lets the app write there. **RULED OUT by the
+   probe:** the sandboxed app cannot write its own Application Scripts
+   directory (`NSApplicationScriptsDirectory`) at all (`Operation not
+   permitted`); it is read-execute only from inside the sandbox, by design. So
+   the app cannot own a stamp there.
 3. **App-group container** shared between the app and a packaged helper. This
    reintroduces a helper the app ships, which pushes back toward the 2.4.5
    problems, so it is the least preferred.
 
-This is the single most important thing to settle on a signed build; it does
-not change the privilege model or the review posture, only where the shared
-state lives and whether the session loop runs in Rust (app) or in the shell
-(script).
+**SETTLED (2026-10-05, local app-sandbox probe):** resolution 1 is the only
+viable one. The watchdog/toggle (running as the plain user) own the stamp at
+the real-path `~/Library/Application Support/dev.peterdsp.klipa/`; the app
+drives the session by `NSUserUnixTask` verb and reads the toggle's stdout, and
+never reads or writes that file itself. The `powerprotect::SessionManager` pure
+logic and stamp format therefore specify the script/watchdog side. This does
+not change the privilege model or the review posture, only confirms where the
+shared state lives.
 
 ## Review implications
 
@@ -161,14 +169,65 @@ App Store Connect. The pipeline is proven; a clean validate (and any real
 submission) just needs a higher version, once the Power Protect wiring and the
 runtime sandbox checks below are done.
 
+## Runtime evidence (local app-sandbox probe, 2026-10-05)
+
+The two runtime unknowns no longer need a store build to settle their
+mechanics. A minimal Objective-C probe was compiled, bundled, and codesigned
+with the local **Apple Development** identity plus only
+`com.apple.security.app-sandbox`, then run on the owner Mac (Mac17,3 arm64,
+macOS 27.0 build 26A428). The sandbox genuinely engaged, so its behavior is
+real, not simulated:
+
+- **Sandbox active.** `NSHomeDirectory()` returned
+  `~/Library/Containers/<bundle-id>/Data` and `APP_SANDBOX_CONTAINER_ID` was
+  set. Control: the same binary run unsandboxed returned the real home.
+- **Sandbox is strict.** `fopen` of an out-of-container user file
+  (`~/git/klipa/Cargo.toml`, the real `~/Library/Application Support/.../
+  license.json`) returned `Operation not permitted`; `/etc/hosts` (world
+  readable) opened. Unsandboxed, all opened. So denials below are real sandbox
+  denials.
+- **`NSUserUnixTask` works with no extra entitlement.** It executed the
+  Application-Scripts toggle (`klipa-powerprotect`) and captured its single
+  `SleepDisabled=0` line on stdout. With verb `on` and no sudoers rule present,
+  the completion handler received `NSError` "sudo: a password is required",
+  stdout was empty, and `SleepDisabled` stayed `0`: the privileged path fails
+  **closed**, never a false "on". This is the error-handling and output-capture
+  behavior the app contract assumes.
+- **Container redirection confirmed, so state must be script-owned.** The app's
+  `NSApplicationSupportDirectory` resolved inside the container; its
+  `NSApplicationScriptsDirectory` resolved to the **real** path
+  `~/Library/Application Scripts/<id>/` but was **not writable** by the app
+  (`Operation not permitted`). The off-store helper (plain user) writes the
+  toggle there; the app only executes it. Confirms resolution 1 and rules out
+  resolution 2.
+- **The sandbox does NOT block `/var/run`.** A sandboxed `connect()` to the
+  live `0666` `/var/run/dev.peterdsp.klipa.helper.sock` returned `0` (the direct
+  build's root daemon was running); bogus socket paths returned `ENOENT`. The
+  unsandboxed control was identical. The earlier claim that the sandbox blocks
+  this socket was wrong and has been corrected here and in `powerprotect.rs`.
+  The companion design stands on its own merits (2.4.5 forbids shipping or
+  requiring a root daemon via the store; a `pmset`-scoped sudoers rule is far
+  less privilege), not on a non-existent technical block.
+
+**Caveat, stated honestly.** This probe carries only `app-sandbox`, not the
+`application-identifier`/`team-identifier` entitlements or the App Store
+provisioning profile of a real MAS build, and it is not the klipa binary. It
+proves the sandbox *mechanics* the design depends on (container redirection,
+Application Scripts read-only, `NSUserUnixTask` exec + stdout + error, socket
+reachability) on this macOS version. It does not prove App Review's judgment,
+nor the exact container identity of the shipped app, nor the end-to-end
+toggle/restore under a real `disablesleep` flip (that needs the sudoers rule on
+a clean environment, kept off the direct-build physical-test Mac). The probe
+sources live in the session scratchpad; they are a diagnostic, not shipped code.
+
 ## Proof plan: what must be shown, and what blocks it
 
 | Claim | How to prove | Status / blocked on |
 |---|---|---|
 | The MAS build compiles, signs (MAS cert + profile), and reaches `altool --validate-app` | CI `release.yml` dispatch with `mas_validate_only=true` | DONE (run 37224443856): built, signed, productbuilt, validated up to the version-collision check (-19232); pipeline proven, no new Apple access |
-| `NSUserUnixTask` actually runs the Application-Scripts toggle from inside the sandbox, and stdout is capturable | Run a signed sandboxed build and observe | A RUNNABLE signed sandboxed build (TestFlight, or a Developer-ID + app-sandbox dev build); not just a CI-built pkg |
-| Where app and scripts share state (the Application Support redirection fork above) | Observe real vs container paths on a signed sandboxed build | Same runnable sandboxed build |
-| The sandboxed app cannot reach `/var/run` (direct socket truly out) | `UnixStream::connect` from the sandboxed build; expect denial | Same runnable sandboxed build |
+| `NSUserUnixTask` actually runs the Application-Scripts toggle from inside the sandbox, and stdout is capturable | Run a signed sandboxed build and observe | DONE (2026-10-05 local app-sandbox probe): runs the toggle, captures `SleepDisabled=0` on stdout; a failing privileged `on` surfaces as `NSError` "sudo: a password is required" with empty stdout and no power change. Re-confirm on a profile-backed build. |
+| Where app and scripts share state (the Application Support redirection fork above) | Observe real vs container paths on a signed sandboxed build | DONE (same probe): app `~/Library/Application Support` redirects to `~/Library/Containers/<id>/Data/...`; Application Scripts dir is the real path and read-only to the app. Resolution 1 is the only viable one. |
+| ~~The sandboxed app cannot reach `/var/run`~~ (claim was WRONG) | `connect()` from the sandboxed build | DONE (same probe): the sandbox does NOT block it. A sandboxed `connect()` to the live 0666 `/var/run` helper socket returned 0, identical to unsandboxed; bogus paths returned `ENOENT` both ways. The companion is chosen on review posture + least privilege, not a sandbox block. |
 | sudoers rule + toggle flips `disablesleep` 0<->1 with read-back, restores to prior | Install on a CLEAN account/Mac, run the toggle, read `pmset -g` | A clean environment, NOT the Mac mid direct-build test (contamination) |
 | LaunchAgent restores a timed session behind a shut lid | Physical timed closed-lid case on the clean env | Clean env + physical lid action (owner) |
 | App Review accepts the shape | Submit with accurate review notes | Owner Apple account; outcome is Apple's, not assertable in advance |
@@ -178,19 +237,27 @@ runtime sandbox checks below are done.
 Development that is NOT blocked is done (logic, companion, tests) or in CI
 (signed MAS build + validate). What genuinely needs more than code:
 
-1. A **runnable signed sandboxed build** (TestFlight build, or a local
-   Developer-ID build carrying the `app-sandbox` entitlement) to settle the two
-   runtime unknowns: that `NSUserUnixTask` executes the toggle and returns its
-   output under the sandbox, and which state-sharing option (above) is correct.
-   A CI-built MAS `.pkg` is for upload, not local run, so it does not by itself
-   answer these.
+1. ~~A runnable signed sandboxed build to settle the two runtime unknowns.~~
+   **DONE via the local app-sandbox probe (2026-10-05).** The sandbox mechanics
+   the design depends on are settled: `NSUserUnixTask` executes the toggle and
+   captures stdout, a failed privileged call fails closed, Application Support
+   redirects to the container, the Application Scripts dir is real-path and
+   read-only to the app (so resolution 1 is the only viable state model), and
+   the sandbox does not block the `/var/run` socket. A **profile-backed App
+   Store build** (TestFlight or an App-Store-provisioned dev build) is still
+   wanted to re-confirm these under the real `application-identifier` container,
+   but it is a confirmation, not an open unknown.
 2. A **clean test environment** and **physical lid actions** to prove the
-   toggle/watchdog keep the Mac awake and restore, without contaminating the
-   direct-build test.
+   toggle/watchdog keep the Mac awake and restore under a real `disablesleep`
+   flip, without contaminating the direct-build test. This is the one on-device
+   step the probe deliberately did not do (it never installed the sudoers rule
+   or flipped power on the physical-test Mac).
 3. The **owner Apple account** only for the final step: an actual App Store
    Connect upload + submission + review. Building and validating do not need new
    access; submitting for review does.
 
-Until the runnable sandboxed build settles the runtime unknowns, B stays a
-documented, logic-complete, CI-buildable candidate, not a verified or approved
-feature. No "verified" claim will be made for it before that evidence exists.
+With the runtime mechanics settled, B is a documented, logic-complete,
+CI-buildable candidate whose sandbox behavior is now evidenced. It is still not
+a verified or approved feature: the end-to-end on-device toggle/restore (item 2)
+and App Review (item 3) remain. No "verified feature" or "approved" claim will
+be made before that evidence exists.
