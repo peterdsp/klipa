@@ -218,6 +218,16 @@ real, not simulated:
   The companion design stands on its own merits (2.4.5 forbids shipping or
   requiring a root daemon via the store; a `pmset`-scoped sudoers rule is far
   less privilege), not on a non-existent technical block.
+- **Transport reachability is NOT authorization.** Reaching the socket does not
+  mean a caller can make the daemon act. A second sandboxed probe connected and
+  sent a well-formed `hello`/`status`, and the helper replied
+  `{"error":"unauthenticated","detail":"caller not authorized"}` and did
+  nothing. Notably the probe signed under klipa's own Team ID (`YTS4KJBX3P`) and
+  was still rejected, because its bundle identifier (`dev.peterdsp.klipa.probe3`)
+  did not satisfy the helper's code requirement (Apple anchor + bundle
+  `dev.peterdsp.klipa` + Team ID). So the security boundary is the helper's
+  `SecCode`/requirement check on the peer's audit token (`auth.rs`), not the
+  socket's reachability. An arbitrary sandboxed app cannot drive the daemon.
 
 **Caveat, stated honestly.** This probe carries only `app-sandbox`, not the
 `application-identifier`/`team-identifier` entitlements or the App Store
