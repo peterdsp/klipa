@@ -1,0 +1,38 @@
+name: asc-status
+
+# Read-only App Store Connect build-status query. Uses the SAME ASC API key the
+# release workflow already holds in secrets, so it needs no new Apple access.
+# Reports processing state, export-compliance, and testability of the uploaded
+# MAS build. Dispatch only; never runs on push.
+on:
+  workflow_dispatch:
+    inputs:
+      expect_build:
+        description: "Candidate CFBundleVersion to focus on."
+        type: string
+        default: "0.6.3"
+
+permissions:
+  contents: read
+
+jobs:
+  status:
+    runs-on: ubuntu-latest
+    env:
+      ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+      ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+      ASC_API_KEY_P8_BASE64: ${{ secrets.ASC_API_KEY_P8_BASE64 }}
+      ASC_EXPECT_BUILD: ${{ github.event.inputs.expect_build }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install deps
+        run: pip install "pyjwt[crypto]"
+      - name: Query App Store Connect
+        run: |
+          if [ -z "${ASC_API_KEY_P8_BASE64:-}" ]; then
+            echo "ASC secrets not set; cannot query."; exit 1
+          fi
+          python3 scripts/asc-build-status.py
