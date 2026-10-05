@@ -165,9 +165,19 @@ DHESPOLLARI", and reached `altool --validate-app`. The ONLY validation error was
 `-19232`: "The bundle version must be higher than the previously uploaded
 version: '0.6.2'." That is a version collision, not a code/signing/entitlement
 problem, and it independently confirms a 0.6.2 MAS build is already uploaded to
-App Store Connect. The pipeline is proven; a clean validate (and any real
-submission) just needs a higher version, once the Power Protect wiring and the
-runtime sandbox checks below are done.
+App Store Connect.
+
+**Version collision RESOLVED and clean validate PROVEN (run 37360017679,
+2026-10-05).** `release.yml` now takes `-f mas_build_version=<build>` to override
+the MAS `CFBundleVersion` only (the direct release and `CFBundleShortVersionString`
+are untouched). A first attempt with `0.6.2.1` surfaced a *second*, independent
+error (`-19241`: `CFBundleVersion` must be at most three integer components),
+confirming the version was not the only check. With `mas_build_version=0.6.3`
+(short version still `0.6.2`), the run reported `No errors validating archive at
+'dist/klipa-0.6.2-mas.pkg'` and `validate-only: ... App-Store-validated`. So the
+signed MAS build of this branch now passes the full App Store validation suite,
+with no new Apple access. An actual upload/submission still needs the owner's ASC
+account and the agreed release sequencing (below).
 
 ## Runtime evidence (local app-sandbox probe, 2026-10-05)
 
@@ -224,7 +234,7 @@ sources live in the session scratchpad; they are a diagnostic, not shipped code.
 
 | Claim | How to prove | Status / blocked on |
 |---|---|---|
-| The MAS build compiles, signs (MAS cert + profile), and reaches `altool --validate-app` | CI `release.yml` dispatch with `mas_validate_only=true` | DONE (run 37224443856): built, signed, productbuilt, validated up to the version-collision check (-19232); pipeline proven, no new Apple access |
+| The MAS build compiles, signs (MAS cert + profile), and PASSES `altool --validate-app` cleanly | CI `release.yml` dispatch with `mas_validate_only=true -f mas_build_version=0.6.3` | DONE CLEAN (run 37360017679, 2026-10-05): "No errors validating archive". Earlier run 37224443856 had reached validation but failed the version check (-19232); 0.6.2.1 then failed -19241 (>3 components); 0.6.3 passes. No new Apple access. |
 | `NSUserUnixTask` actually runs the Application-Scripts toggle from inside the sandbox, and stdout is capturable | Run a signed sandboxed build and observe | DONE (2026-10-05 local app-sandbox probe): runs the toggle, captures `SleepDisabled=0` on stdout; a failing privileged `on` surfaces as `NSError` "sudo: a password is required" with empty stdout and no power change. Re-confirm on a profile-backed build. |
 | Where app and scripts share state (the Application Support redirection fork above) | Observe real vs container paths on a signed sandboxed build | DONE (same probe): app `~/Library/Application Support` redirects to `~/Library/Containers/<id>/Data/...`; Application Scripts dir is the real path and read-only to the app. Resolution 1 is the only viable one. |
 | ~~The sandboxed app cannot reach `/var/run`~~ (claim was WRONG) | `connect()` from the sandboxed build | DONE (same probe): the sandbox does NOT block it. A sandboxed `connect()` to the live 0666 `/var/run` helper socket returned 0, identical to unsandboxed; bogus paths returned `ENOENT` both ways. The companion is chosen on review posture + least privilege, not a sandbox block. |
