@@ -20,6 +20,10 @@ on:
         description: "Build + App-Store-validate the MAS pkg without uploading (for branch verification)."
         type: boolean
         default: false
+      mas_build_version:
+        description: "Override the MAS CFBundleVersion (App Store build number). Must be strictly higher than any previously uploaded build. Empty = use the Cargo version."
+        type: string
+        default: ""
 
 permissions:
   contents: write
@@ -226,6 +230,9 @@ jobs:
       # App Store but do NOT upload (used to verify a branch without pushing a
       # work-in-progress build to App Store Connect).
       MAS_VALIDATE_ONLY: ${{ github.event.inputs.mas_validate_only }}
+      # Override the App Store build number (CFBundleVersion) for the MAS build
+      # only; leaves the direct release and CFBundleShortVersionString alone.
+      MAS_BUILD_VERSION: ${{ github.event.inputs.mas_build_version }}
     steps:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
