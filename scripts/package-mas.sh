@@ -27,6 +27,20 @@ sed "s/TEAMID/${TEAMID}/g" packaging/macos/entitlements.mas.plist > "$ENT"
 # when the user opts in - the store permits outbound HTTP.
 TARGET="universal" FEATURES="mas weather" NO_DEFAULT="1" ./scripts/bundle-macos.sh
 
+# App Store build-number (CFBundleVersion) override, MAS build only.
+# App Store Connect rejects an upload whose CFBundleVersion is not strictly
+# higher than any previously uploaded build for this app (altool -19232).
+# `bundle-macos.sh` set both version keys to the Cargo version ($VERSION);
+# the direct $VERSION release is already uploaded, and the staged direct
+# release must stay untouched, so the MAS candidate carries its own higher
+# build number HERE ONLY. CFBundleShortVersionString (the marketing version)
+# stays $VERSION. Default (unset) keeps the previous behaviour.
+MAS_BUILD_VERSION="${MAS_BUILD_VERSION:-$VERSION}"
+if [ "$MAS_BUILD_VERSION" != "$VERSION" ]; then
+  /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $MAS_BUILD_VERSION" "$APP/Contents/Info.plist"
+  echo "==> MAS CFBundleVersion=$MAS_BUILD_VERSION (CFBundleShortVersionString stays $VERSION)"
+fi
+
 if [ -n "${PROFILE:-}" ]; then
   cp "$PROFILE" "$APP/Contents/embedded.provisionprofile"
 fi

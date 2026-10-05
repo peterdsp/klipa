@@ -15,6 +15,19 @@ on:
   release:
     types: [published]
   workflow_dispatch:
+    inputs:
+      mas_validate_only:
+        description: "Build + App-Store-validate the MAS pkg without uploading (for branch verification)."
+        type: boolean
+        default: false
+      mas_build_version:
+        description: "Override the MAS CFBundleVersion (App Store build number). Must be strictly higher than any previously uploaded build. Empty = use the Cargo version."
+        type: string
+        default: ""
+      mas_only:
+        description: "Build ONLY the Mac App Store candidate (skip the direct macOS/Windows/Linux artifact jobs). Use for a TestFlight/App-Store candidate upload."
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -55,7 +68,7 @@ jobs:
   # ─────────────────────────────── macOS ────────────────────────────────
   macos:
     needs: [verify]
-    if: github.event_name != 'release'
+    if: github.event_name != 'release' && github.event.inputs.mas_only != 'true'
     runs-on: macos-14
     # Same secret names as the PromptBar repo, so the Developer ID certs
     # can be reused. All optional: with no secrets the job still builds
@@ -133,7 +146,7 @@ jobs:
   # ────────────────────────────── Windows ───────────────────────────────
   windows:
     needs: [verify]
-    if: github.event_name != 'release'
+    if: github.event_name != 'release' && github.event.inputs.mas_only != 'true'
     runs-on: windows-latest
     env:
       KLIPA_PURCHASE_URL: ${{ vars.KLIPA_PURCHASE_URL }}
@@ -160,7 +173,7 @@ jobs:
   # ─────────────────────────────── Linux ────────────────────────────────
   linux:
     needs: [verify]
-    if: github.event_name != 'release'
+    if: github.event_name != 'release' && github.event.inputs.mas_only != 'true'
     runs-on: ubuntu-latest
     env:
       KLIPA_PURCHASE_URL: ${{ vars.KLIPA_PURCHASE_URL }}
@@ -217,6 +230,13 @@ jobs:
       ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
       ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
       ASC_API_KEY_P8_BASE64: ${{ secrets.ASC_API_KEY_P8_BASE64 }}
+      # When dispatched with mas_validate_only=true, build + validate against the
+      # App Store but do NOT upload (used to verify a branch without pushing a
+      # work-in-progress build to App Store Connect).
+      MAS_VALIDATE_ONLY: ${{ github.event.inputs.mas_validate_only }}
+      # Override the App Store build number (CFBundleVersion) for the MAS build
+      # only; leaves the direct release and CFBundleShortVersionString alone.
+      MAS_BUILD_VERSION: ${{ github.event.inputs.mas_build_version }}
     steps:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
@@ -260,13 +280,17 @@ jobs:
           mkdir -p "$HOME/.appstoreconnect/private_keys"
           echo "$ASC_API_KEY_P8_BASE64" | base64 -d > "$HOME/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8"
 
-          # 6. Validate, then upload to App Store Connect.
+          # 6. Validate against the App Store, then upload (unless validate-only).
           PKG=$(ls dist/klipa-*-mas.pkg)
           xcrun altool --validate-app -f "$PKG" -t macos \
             --apiKey "$ASC_KEY_ID" --apiIssuer "$ASC_ISSUER_ID"
-          xcrun altool --upload-app -f "$PKG" -t macos \
-            --apiKey "$ASC_KEY_ID" --apiIssuer "$ASC_ISSUER_ID"
-          echo "Uploaded $PKG to App Store Connect."
+          if [ "${MAS_VALIDATE_ONLY:-false}" = "true" ]; then
+            echo "validate-only: built and App-Store-validated $PKG; skipping upload."
+          else
+            xcrun altool --upload-app -f "$PKG" -t macos \
+              --apiKey "$ASC_KEY_ID" --apiIssuer "$ASC_ISSUER_ID"
+            echo "Uploaded $PKG to App Store Connect."
+          fi
 
       - name: Notice (MAS secrets not set)
         if: ${{ env.MAS_CERTS_P12_BASE64 == '' || env.ASC_API_KEY_P8_BASE64 == '' }}
