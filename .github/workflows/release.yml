@@ -24,6 +24,10 @@ on:
         description: "Override the MAS CFBundleVersion (App Store build number). Must be strictly higher than any previously uploaded build. Empty = use the Cargo version."
         type: string
         default: ""
+      mas_only:
+        description: "Build ONLY the Mac App Store candidate (skip the direct macOS/Windows/Linux artifact jobs). Use for a TestFlight/App-Store candidate upload."
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -64,7 +68,7 @@ jobs:
   # ─────────────────────────────── macOS ────────────────────────────────
   macos:
     needs: [verify]
-    if: github.event_name != 'release'
+    if: github.event_name != 'release' && github.event.inputs.mas_only != 'true'
     runs-on: macos-14
     # Same secret names as the PromptBar repo, so the Developer ID certs
     # can be reused. All optional: with no secrets the job still builds
@@ -142,7 +146,7 @@ jobs:
   # ────────────────────────────── Windows ───────────────────────────────
   windows:
     needs: [verify]
-    if: github.event_name != 'release'
+    if: github.event_name != 'release' && github.event.inputs.mas_only != 'true'
     runs-on: windows-latest
     env:
       KLIPA_PURCHASE_URL: ${{ vars.KLIPA_PURCHASE_URL }}
@@ -169,7 +173,7 @@ jobs:
   # ─────────────────────────────── Linux ────────────────────────────────
   linux:
     needs: [verify]
-    if: github.event_name != 'release'
+    if: github.event_name != 'release' && github.event.inputs.mas_only != 'true'
     runs-on: ubuntu-latest
     env:
       KLIPA_PURCHASE_URL: ${{ vars.KLIPA_PURCHASE_URL }}
