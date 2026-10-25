@@ -4,7 +4,7 @@
 //! down the recent clipboard entries; clicking an entry copies it back
 //! to the clipboard. No window, no GPU, no renderer - hence tiny.
 
-use crate::adapters::clipboard::{decode_png, read_image_png};
+use crate::adapters::clipboard::decode_png_thumb;
 use crate::awake::{AwakeDuration, AwakeMode, AwakeView, EngageErr, LidBlock, ProtectionState};
 use crate::clamshell::ClamshellStatus;
 use crate::license::Gate;
@@ -275,12 +275,15 @@ impl Tray {
     /// Build (and cache) a small menu icon from an image entry.
     fn thumb_icon(&self, reference: &str) -> Option<MenuIcon> {
         if !self.thumbs.borrow().contains_key(reference) {
-            let png = read_image_png(reference)?;
-            let (w, h, rgba) = decode_png(&png)?;
-            let thumb = downscale(w, h, &rgba, THUMB);
-            self.thumbs
-                .borrow_mut()
-                .insert(reference.to_string(), (thumb, THUMB as u32, THUMB as u32));
+            let thumb = decode_png_thumb(reference, THUMB)?;
+            let mut cache = self.thumbs.borrow_mut();
+            // Only the entries the dropdown can show are worth holding,
+            // so the cache cannot grow with the history behind it.
+            if cache.len() >= MAX_MENU_ITEMS_HARD {
+                cache.clear();
+            }
+            cache.insert(reference.to_string(), (thumb, THUMB as u32, THUMB as u32));
+            drop(cache);
         }
         let cache = self.thumbs.borrow();
         let (rgba, w, h) = cache.get(reference)?;
@@ -612,32 +615,6 @@ fn build_show_count_submenu(current: usize) -> Submenu {
         ));
     }
     sub
-}
-
-/// Nearest-neighbour fit of `rgba` into a `size`x`size` transparent
-/// canvas, preserving aspect ratio. Cheap and good enough for a glyph.
-fn downscale(w: usize, h: usize, rgba: &[u8], size: usize) -> Vec<u8> {
-    let mut out = vec![0u8; size * size * 4];
-    if w == 0 || h == 0 {
-        return out;
-    }
-    let scale = (size as f32 / w as f32).min(size as f32 / h as f32);
-    let tw = ((w as f32 * scale).round() as usize).max(1).min(size);
-    let th = ((h as f32 * scale).round() as usize).max(1).min(size);
-    let ox = (size - tw) / 2;
-    let oy = (size - th) / 2;
-    for ty in 0..th {
-        let sy = ty * h / th;
-        for tx in 0..tw {
-            let sx = tx * w / tw;
-            let si = (sy * w + sx) * 4;
-            let di = ((oy + ty) * size + ox + tx) * 4;
-            if si + 4 <= rgba.len() && di + 4 <= out.len() {
-                out[di..di + 4].copy_from_slice(&rgba[si..si + 4]);
-            }
-        }
-    }
-    out
 }
 
 /// Collapse whitespace to single spaces and truncate for the menu.
