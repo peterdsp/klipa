@@ -119,9 +119,11 @@ def main():
     print(f"build: {build_version} id={build['id']} uploaded={build['attributes']['uploadedDate']}")
 
     # 2. the App Store version
+    # The API key is not allowed to list appStoreVersions as a collection,
+    # so read them through the app, which it is allowed to traverse.
     versions = call(
         "GET",
-        f"/v1/appStoreVersions?filter[app]={app_id}&filter[platform]={PLATFORM}"
+        f"/v1/apps/{app_id}/appStoreVersions?filter[platform]={PLATFORM}"
         f"&limit=10&fields[appStoreVersions]=versionString,appStoreState,createdDate",
         tok,
     )["data"]
@@ -195,13 +197,20 @@ def main():
     )
 
     # 5. review submission
-    subs = call(
-        "GET",
-        f"/v1/reviewSubmissions?filter[app]={app_id}&filter[platform]={PLATFORM}"
-        f"&filter[state]=READY_FOR_REVIEW,WAITING_FOR_REVIEW,IN_REVIEW,UNRESOLVED_ISSUES"
-        f"&limit=10&fields[reviewSubmissions]=state,submitted",
-        tok,
-    )["data"]
+    try:
+        subs = call(
+            "GET",
+            f"/v1/apps/{app_id}/reviewSubmissions?filter[platform]={PLATFORM}"
+            f"&filter[state]=READY_FOR_REVIEW,WAITING_FOR_REVIEW,IN_REVIEW,UNRESOLVED_ISSUES"
+            f"&limit=10&fields[reviewSubmissions]=state,submitted",
+            tok,
+        )["data"]
+    except urllib.error.HTTPError:
+        # Cannot see existing submissions with this key. Creating one is
+        # still allowed, and a duplicate is rejected rather than silently
+        # queued twice, so carry on.
+        print("  cannot list review submissions with this key; continuing")
+        subs = []
     open_sub = next((s for s in subs if not s["attributes"].get("submitted")), None)
     if subs and open_sub is None:
         print(f"  a review submission is already in flight ({subs[0]['attributes']['state']})")
