@@ -45,17 +45,20 @@ jobs:
         run: pip install "pyjwt[crypto]"
       - name: Read the release notes for this version
         run: |
+          # Prefer store copy written for customers; fall back to the
+          # engineering release notes with the markdown stripped out.
+          store="docs/store-whats-new-${ASC_VERSION}.txt"
           notes="docs/release-notes-${ASC_VERSION}.md"
-          if [ ! -f "$notes" ]; then
-            echo "No $notes; the store listing keeps its current text."
-            exit 0
+          if [ -f "$store" ]; then
+            { echo "ASC_WHATS_NEW<<EOF"; cat "$store"; echo "EOF"; } >> "$GITHUB_ENV"
+          elif [ -f "$notes" ]; then
+            {
+              echo "ASC_WHATS_NEW<<EOF"
+              sed -e '/^#/d' -e 's/^- /* /' "$notes" | awk 'NF || p {print; p=1}'
+              echo "EOF"
+            } >> "$GITHUB_ENV"
+          else
+            echo "No store copy or release notes; the listing keeps its current text."
           fi
-          # The store's "What's New" field is plain text, so strip the
-          # markdown headings and keep the prose.
-          {
-            echo "ASC_WHATS_NEW<<EOF"
-            sed -e '/^#/d' -e 's/^- /* /' "$notes" | awk 'NF || p {print; p=1}'
-            echo "EOF"
-          } >> "$GITHUB_ENV"
       - name: Create version, attach build, submit
         run: python3 scripts/asc-submit.py
