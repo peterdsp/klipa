@@ -1,0 +1,61 @@
+name: asc-submit
+
+# Create the Mac App Store version for an uploaded build and submit it for
+# App Review. Uses the SAME App Store Connect API key the release workflow
+# already holds in secrets, so it needs no new Apple access.
+#
+# Dispatch only, and a dry run by default: `submit` must be set to true
+# before anything is written. The dry run prints the exact calls it would
+# make against the real App Store Connect state.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Marketing version to ship (CFBundleShortVersionString)."
+        type: string
+        default: "0.6.3"
+      build_version:
+        description: "Build (CFBundleVersion) to attach. Empty = same as version."
+        type: string
+        default: ""
+      submit:
+        description: "Actually create, attach and submit. Unchecked = dry run."
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  submit:
+    runs-on: ubuntu-latest
+    env:
+      ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+      ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+      ASC_API_KEY_P8_BASE64: ${{ secrets.ASC_API_KEY_P8_BASE64 }}
+      ASC_VERSION: ${{ github.event.inputs.version }}
+      ASC_BUILD_VERSION: ${{ github.event.inputs.build_version }}
+      ASC_SUBMIT: ${{ github.event.inputs.submit == 'true' && '1' || '0' }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install deps
+        run: pip install "pyjwt[crypto]"
+      - name: Read the release notes for this version
+        run: |
+          notes="docs/release-notes-${ASC_VERSION}.md"
+          if [ ! -f "$notes" ]; then
+            echo "No $notes; the store listing keeps its current text."
+            exit 0
+          fi
+          # The store's "What's New" field is plain text, so strip the
+          # markdown headings and keep the prose.
+          {
+            echo "ASC_WHATS_NEW<<EOF"
+            sed -e '/^#/d' -e 's/^- /* /' "$notes" | awk 'NF || p {print; p=1}'
+            echo "EOF"
+          } >> "$GITHUB_ENV"
+      - name: Create version, attach build, submit
+        run: python3 scripts/asc-submit.py
