@@ -13,6 +13,11 @@ use std::sync::Mutex;
 use tokio::sync::Notify;
 
 pub struct ArboardClipboard {
+    /// Pasteboard change counter as of the last poll, where the OS
+    /// offers one. Reading it is free and the OS bumps it on every
+    /// clipboard write, so it tells us whether a poll has anything to
+    /// do before we touch the contents at all.
+    last_change: Mutex<Option<i64>>,
     /// Signature of the last thing we saw, so we don't re-capture the
     /// same clipboard contents on every poll. Text -> the text itself;
     /// image -> dimensions + a cheap content hash.
@@ -23,12 +28,26 @@ pub struct ArboardClipboard {
 impl ArboardClipboard {
     pub fn new() -> Self {
         Self {
+            last_change: Mutex::new(None),
             last_sig: Mutex::new(None),
             notify: Notify::new(),
         }
     }
 
     pub fn poll_once(&self) -> Option<PasteboardEvent> {
+        // Nothing has touched the clipboard since the last poll, so
+        // there is nothing here we have not already seen. Bailing now
+        // skips the read entirely, which matters most when an image is
+        // sitting on the clipboard: `get_image` materialises the whole
+        // picture as RGBA (tens of megabytes for a retina screenshot)
+        // and the signature then hashes every byte of it, only to
+        // conclude it is unchanged. Twice a second, for as long as that
+        // image stays copied, that alone kept the process at a fifth of
+        // a core and hundreds of megabytes resident.
+        if !self.pasteboard_changed() {
+            return None;
+        }
+
         let mut cb = arboard::Clipboard::new().ok()?;
 
         // Prefer text. Most copies are text and it's cheap to read.
@@ -91,6 +110,22 @@ impl ArboardClipboard {
         None
     }
 
+    /// Returns true when the clipboard may hold something new, and
+    /// records the counter it saw. Platforms without a change counter
+    /// always return true and fall through to the content check, which
+    /// is the only dedupe they ever had.
+    fn pasteboard_changed(&self) -> bool {
+        let Some(count) = pasteboard_change_count() else {
+            return true;
+        };
+        let mut last = self.last_change.lock().unwrap_or_else(|p| p.into_inner());
+        if *last == Some(count) {
+            return false;
+        }
+        *last = Some(count);
+        true
+    }
+
     /// Returns true (and records `sig`) if it differs from the last.
     fn is_new(&self, sig: &str) -> bool {
         let mut last = self.last_sig.lock().unwrap_or_else(|p| p.into_inner());
@@ -100,6 +135,24 @@ impl ArboardClipboard {
         *last = Some(sig.to_string());
         true
     }
+}
+
+/// Current pasteboard change counter, or None where the platform has
+/// no such notion and every poll has to read the contents to find out.
+#[cfg(target_os = "macos")]
+fn pasteboard_change_count() -> Option<i64> {
+    use objc2_app_kit::NSPasteboard;
+
+    // SAFETY: NSPasteboard is thread-safe and `changeCount` is a plain
+    // integer read with no main-thread requirement, so the watcher task
+    // can call it directly. arboard already talks to this same
+    // pasteboard from that task.
+    unsafe { Some(NSPasteboard::generalPasteboard().changeCount() as i64) }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn pasteboard_change_count() -> Option<i64> {
+    None
 }
 
 /// Best-effort frontmost-application name. None when the `frontmost`
@@ -409,6 +462,17 @@ mod tests {
         let whole = downscale(dw, dh, &decoded, 64);
 
         assert_eq!(streamed, whole);
+    }
+
+    /// The whole point of the change-counter gate: a second poll with
+    /// nothing copied in between does no work at all.
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn an_unchanged_pasteboard_is_polled_once() {
+        let cb = ArboardClipboard::new();
+        assert!(cb.pasteboard_changed(), "first poll has nothing to match");
+        assert!(!cb.pasteboard_changed());
+        assert!(!cb.pasteboard_changed());
     }
 
     #[test]
