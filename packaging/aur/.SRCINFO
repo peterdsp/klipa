@@ -1,6 +1,6 @@
 pkgbase = klipa-bin
 	pkgdesc = Small, fast, menubar clipboard manager with keep-awake
-	pkgver = 0.6.3
+	pkgver = 0.6.4
 	pkgrel = 1
 	url = https://klipa.peterdsp.dev
 	arch = x86_64
@@ -10,7 +10,7 @@ pkgbase = klipa-bin
 	depends = libayatana-appindicator
 	provides = klipa
 	conflicts = klipa
-	source = klipa-0.6.3.tar.gz::https://github.com/peterdsp/klipa/releases/download/v0.6.3/klipa-0.6.3-linux-x86_64.tar.gz
-	sha256sums = 65d3cceab6b75a75506b939e31de88e4277698cbf805eb5cbefa18dfff36c49b
+	source = klipa-0.6.4.tar.gz::https://github.com/peterdsp/klipa/releases/download/v0.6.4/klipa-0.6.4-linux-x86_64.tar.gz
+	sha256sums = 715a55d92acccb309e7777c60e8648e8ad941b7f03de01153a585b0baee3187d
 
 pkgname = klipa-bin
