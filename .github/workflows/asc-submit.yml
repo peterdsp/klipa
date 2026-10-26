@@ -13,7 +13,7 @@ on:
       version:
         description: "Marketing version to ship (CFBundleShortVersionString)."
         type: string
-        default: "0.6.3"
+        default: "0.6.4"
       build_version:
         description: "Build (CFBundleVersion) to attach. Empty = same as version."
         type: string

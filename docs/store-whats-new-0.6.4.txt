@@ -1,0 +1,29 @@
+This update brings everything since 0.5.1 to the App Store.
+
+Lower memory use
+klipa no longer keeps whole images in memory. Previews in the dropdown
+are built without decoding the full picture, and watching the clipboard
+no longer re-reads an image that is sitting there unchanged. Copy a
+screenshot and leave it copied: klipa stays small and idle instead of
+growing for as long as it is there.
+
+Honest keep-awake
+Keep-awake reports what it is actually doing rather than assuming a
+request worked: preparing, active, recovering, or needs attention. When
+macOS will not keep your Mac awake in a given configuration, klipa says
+so and names the reason instead of failing quietly. Timed sessions end
+on their own, and changing the length or mode of a running session no
+longer drops protection for a moment.
+
+Clearer about closing the lid
+klipa now tells you what closing the lid will actually do on your Mac.
+With an external display attached it stays awake with no special
+privilege. On a bare laptop that needs a system-level override, which
+the App Store version is sandboxed and cannot perform, so klipa says
+that plainly rather than appearing to work.
+
+Also in this update
+Image entries show a preview thumbnail in the dropdown. The menu bar can
+show the icon, the date, the temperature, or a combination. The dropdown
+stays a compact panel instead of growing to fill the screen. Various
+reliability fixes to keep-awake and to how history is stored.
